@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class RegisterForm extends StatefulWidget {
-  const RegisterForm({super.key});
+  final VoidCallback? onBackTap;
+  
+  const RegisterForm({super.key, this.onBackTap});
 
   @override
   State<RegisterForm> createState() => _RegisterFormState();
@@ -15,7 +17,6 @@ class _RegisterFormState extends State<RegisterForm> {
   final _confirmPasswordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,28 +27,21 @@ class _RegisterFormState extends State<RegisterForm> {
     super.dispose();
   }
 
-  void _handleRegister() async {
+  void _handleRegister() {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Registration successful! Please login.'),
+          backgroundColor: Colors.green,
+          duration: Duration(milliseconds: 1500),
+        ),
+      );
+
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted && widget.onBackTap != null) {
+          widget.onBackTap!();
+        }
       });
-      
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      // TODO: Implement actual registration logic
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
     }
   }
 
@@ -58,7 +52,6 @@ class _RegisterFormState extends State<RegisterForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Name Field
           _buildTextField(
             controller: _nameController,
             label: 'Full Name',
@@ -75,8 +68,7 @@ class _RegisterFormState extends State<RegisterForm> {
             },
           ),
           const SizedBox(height: 16.0),
-          
-          // Email Field
+
           _buildTextField(
             controller: _emailController,
             label: 'Email',
@@ -87,15 +79,16 @@ class _RegisterFormState extends State<RegisterForm> {
               if (value == null || value.isEmpty) {
                 return 'Please enter your email';
               }
-              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+              if (!RegExp(
+                r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+              ).hasMatch(value)) {
                 return 'Please enter a valid email';
               }
               return null;
             },
           ),
           const SizedBox(height: 16.0),
-          
-          // Password Field
+
           _buildTextField(
             controller: _passwordController,
             label: 'Password',
@@ -125,8 +118,7 @@ class _RegisterFormState extends State<RegisterForm> {
             },
           ),
           const SizedBox(height: 16.0),
-          
-          // Confirm Password Field
+
           _buildTextField(
             controller: _confirmPasswordController,
             label: 'Confirm Password',
@@ -156,10 +148,9 @@ class _RegisterFormState extends State<RegisterForm> {
             },
           ),
           const SizedBox(height: 24.0),
-          
-          // Register Button
+
           ElevatedButton(
-            onPressed: _isLoading ? null : _handleRegister,
+            onPressed: _handleRegister,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2D3748),
               foregroundColor: Colors.white,
@@ -169,23 +160,14 @@ class _RegisterFormState extends State<RegisterForm> {
               ),
               elevation: 0,
             ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20.0,
-                    width: 20.0,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.0,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text(
-                    'CREATE ACCOUNT',
-                    style: TextStyle(
-                      fontSize: 16.0,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
+            child: const Text(
+              'CREATE ACCOUNT',
+              style: TextStyle(
+                fontSize: 16.0,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
+            ),
           ),
         ],
       ),
@@ -234,7 +216,10 @@ class _RegisterFormState extends State<RegisterForm> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8.0),
-              borderSide: const BorderSide(color: Color(0xFF2D3748), width: 1.0),
+              borderSide: const BorderSide(
+                color: Color(0xFF2D3748),
+                width: 1.0,
+              ),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8.0),

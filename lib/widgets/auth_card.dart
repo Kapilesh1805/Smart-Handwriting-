@@ -102,8 +102,12 @@ class _AuthCardState extends State<AuthCard>
                     Flexible(
                       child: SingleChildScrollView(
                         child: _isLogin
-                            ? const LoginForm()
-                            : const RegisterForm(),
+                            ? LoginForm(
+                                onSignUpTap: _toggleAuthMode,
+                              )
+                            : RegisterForm(
+                                onBackTap: _toggleAuthMode,
+                              ),
                       ),
                     ),
                     

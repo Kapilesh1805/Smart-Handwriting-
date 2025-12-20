@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../screens/dashboard_page.dart';
 
 class LoginForm extends StatefulWidget {
-  const LoginForm({super.key});
+  final VoidCallback? onSignUpTap;
+  
+  const LoginForm({super.key, this.onSignUpTap});
 
   @override
   State<LoginForm> createState() => _LoginFormState();
@@ -29,15 +31,17 @@ class _LoginFormState extends State<LoginForm> {
         _isLoading = true;
       });
       
-      // TODO: Implement actual login logic
+      await Future.delayed(const Duration(seconds: 1));
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const DashboardPage()),
         );
       }
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
 
@@ -122,8 +126,7 @@ class _LoginFormState extends State<LoginForm> {
                           ),
                           onPressed: () {
                             setState(() {
-                              isConfirmPasswordVisible =
-                                  !isConfirmPasswordVisible;
+                              isConfirmPasswordVisible = !isConfirmPasswordVisible;
                             });
                           },
                         ),
@@ -211,7 +214,6 @@ class _LoginFormState extends State<LoginForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Email Field
           _buildTextField(
             controller: _emailController,
             label: 'Email',
@@ -230,7 +232,6 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 24.0),
           
-          // Password Field
           _buildTextField(
             controller: _passwordController,
             label: 'Password',
@@ -262,26 +263,40 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 16.0),
           
-          // Remember me and Forgot Password
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  Checkbox(
-                    value: _rememberMe,
-                    onChanged: (value) {
+                  GestureDetector(
+                    onTap: () {
                       setState(() {
-                        _rememberMe = value ?? false;
+                        _rememberMe = !_rememberMe;
                       });
                     },
-                    activeColor: const Color(0xFF2D3748),
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: _rememberMe ? const Color(0xFF2D3748) : Colors.white,
+                        border: Border.all(
+                          color: const Color(0xFF2D3748),
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: _rememberMe
+                          ? const Icon(Icons.check, color: Colors.white, size: 16)
+                          : null,
+                    ),
                   ),
+                  const SizedBox(width: 8.0),
                   const Text(
                     'Remember me',
                     style: TextStyle(
                       color: Color(0xFF2D3748),
                       fontSize: 14.0,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -301,7 +316,6 @@ class _LoginFormState extends State<LoginForm> {
           ),
           const SizedBox(height: 32.0),
           
-          // Login Button
           ElevatedButton(
             onPressed: _isLoading ? null : _handleLogin,
             style: ElevatedButton.styleFrom(
@@ -363,6 +377,9 @@ class _LoginFormState extends State<LoginForm> {
           keyboardType: keyboardType,
           obscureText: obscureText,
           validator: validator,
+          style: const TextStyle(
+            color: Color(0xFF1F2937),
+          ),
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[500]),
@@ -388,7 +405,8 @@ class _LoginFormState extends State<LoginForm> {
               borderRadius: BorderRadius.circular(8.0),
               borderSide: const BorderSide(color: Colors.red, width: 1.0),
             ),
-            filled: false,
+            filled: true,
+            fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16.0,
               vertical: 16.0,
