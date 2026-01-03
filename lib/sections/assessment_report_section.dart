@@ -70,8 +70,11 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
       setState(() => _isLoading = true);
     }
     
-    // TODO: API INTEGRATION - This will fetch from backend
-    final report = await AssessmentService.fetchAssessmentReport(childId);
+    // Fetch report with child's actual name
+    final report = await AssessmentService.fetchAssessmentReport(
+      childId,
+      childName: selectedChildName ?? 'Student',
+    );
     
     if (mounted) {
       setState(() {

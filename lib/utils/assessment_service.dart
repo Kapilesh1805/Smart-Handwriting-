@@ -7,7 +7,7 @@ class AssessmentService {
   static const String _baseUrl = 'http://localhost:5000';
 
   // Fetch latest assessment report for a child from backend
-  static Future<AssessmentReport?> fetchAssessmentReport(String childId) async {
+  static Future<AssessmentReport?> fetchAssessmentReport(String childId, {String? childName, int? age, String? grade}) async {
     try {
       debugPrint('📊 Fetching assessment report for child: $childId');
       
@@ -34,10 +34,10 @@ class AssessmentService {
         // Convert backend data to AssessmentReport format
         return AssessmentReport(
           childId: childId,
-          childName: 'Student', // TODO: Fetch from child profile
+          childName: childName ?? 'Student',
           childAvatar: 'assets/avatars/student.png',
-          age: 8,
-          grade: 'Grade 2',
+          age: age ?? 8,
+          grade: grade ?? 'Grade 2',
           date: DateTime.now().toString().split(' ')[0],
           componentScores: [
             ComponentScore(
@@ -109,7 +109,7 @@ class AssessmentService {
   }
 
   // Fetch all assessment history for a child
-  static Future<List<AssessmentReport>> fetchAssessmentHistory(String childId) async {
+  static Future<List<AssessmentReport>> fetchAssessmentHistory(String childId, {String? childName, int? age, String? grade}) async {
     try {
       debugPrint('📊 Fetching assessment history for child: $childId');
       
@@ -128,10 +128,10 @@ class AssessmentService {
           final summary = report['summary'] as Map<String, dynamic>? ?? {};
           return AssessmentReport(
             childId: childId,
-            childName: 'Student',
+            childName: childName ?? 'Student',
             childAvatar: 'assets/avatars/student.png',
-            age: 8,
-            grade: 'Grade 2',
+            age: age ?? 8,
+            grade: grade ?? 'Grade 2',
             date: report['generated_at']?.toString().split(' ')[0] ?? DateTime.now().toString().split(' ')[0],
             componentScores: [
               ComponentScore(
