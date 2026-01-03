@@ -50,6 +50,8 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
             selectedChildId = children.first.id;
             selectedChildName = children.first.name;
           }
+          // Stop loading after children are loaded
+          _isLoading = false;
         });
       }
       if (selectedChildId != null) {
@@ -66,9 +68,7 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
   }
 
   Future<void> _loadAssessmentReport(String childId) async {
-    if (mounted) {
-      setState(() => _isLoading = true);
-    }
+    // Don't show loading spinner, just fetch in background
     
     // Fetch report with child's actual name
     final report = await AssessmentService.fetchAssessmentReport(
