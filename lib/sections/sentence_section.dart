@@ -3,11 +3,19 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/sentence_model.dart';
 import '../models/child_profile.dart';
-import '../utils/child_service.dart';
+import '../services/child_service.dart';
+import '../config/api_config.dart';
 import '../widgets/unified_writing_canvas.dart';
 
 class SentenceSection extends StatefulWidget {
-  const SentenceSection({super.key});
+  final String? childId;
+  final String? childName;
+  
+  const SentenceSection({
+    super.key,
+    this.childId,
+    this.childName,
+  });
 
   @override
   State<SentenceSection> createState() => _SentenceSectionState();
@@ -53,14 +61,32 @@ class _SentenceSectionState extends State<SentenceSection> {
 
   Future<void> _loadChildren() async {
     try {
-      final children = await ChildService.fetchChildren();
-      setState(() {
-        childrenList = children;
-        if (children.isNotEmpty) {
-          selectedChildId = children.first.id;
-          selectedChildName = children.first.name;
-        }
-      });
+      final userId = await Config.getUserId();
+      if (userId == null) {
+        debugPrint('User not authenticated');
+        return;
+      }
+      final children = await ChildService.getChildren(userId: userId);
+      if (mounted) {
+        setState(() {
+          // Convert Child objects to ChildProfile objects
+          childrenList = children.map((child) => ChildProfile(
+            id: child.childId,
+            name: child.name,
+            age: child.age.toString(),
+            grade: 'N/A',
+            avatar: child.name.isNotEmpty ? child.name[0].toUpperCase() : '👦',
+          )).toList();
+          // If child was passed via constructor, select it
+          if (widget.childId != null) {
+            selectedChildId = widget.childId;
+            selectedChildName = widget.childName;
+          } else if (childrenList.isNotEmpty) {
+            selectedChildId = childrenList.first.id;
+            selectedChildName = childrenList.first.name;
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Error loading children: $e');
     }
@@ -305,8 +331,9 @@ class _SentenceSectionState extends State<SentenceSection> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
+    return Material(
+      child: Column(
+        children: [
         // CHILD SELECTION DROPDOWN
         Container(
           color: Colors.white,
@@ -350,9 +377,14 @@ class _SentenceSectionState extends State<SentenceSection> {
           padding: const EdgeInsets.all(12.0),
           child: Column(
             children: [
-              // Title Row
+              // Title Row with Back Button
               Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.blue),
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Go back',
+                  ),
                   const Text(
                     'Sentence Writing',
                     style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.w800),
@@ -502,6 +534,7 @@ class _SentenceSectionState extends State<SentenceSection> {
         // Analysis Results (if any)
         if (showAnalysis && analysisResult != null) _buildAnalysisResults(),
       ],
+    ),
     );
   }
 

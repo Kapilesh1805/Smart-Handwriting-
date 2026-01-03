@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/appointment_widgets.dart';
+import '../services/appointment_service.dart';
 
 class AppointmentSection extends StatefulWidget {
   const AppointmentSection({super.key});
@@ -11,93 +12,184 @@ class AppointmentSection extends StatefulWidget {
 class _AppointmentSectionState extends State<AppointmentSection> {
   DateTime selectedDay = DateTime.now();
   Map<int, SlotData> appointments = {};
-
-  // TODO: API INTEGRATION - Add these imports at top of file
-  // import 'dart:convert';
-  // import 'package:http/http.dart' as http;
+  List<Appointment> _allAppointments = [];
 
   @override
   void initState() {
     super.initState();
-    // TODO: API INTEGRATION - Fetch appointments when page loads
-    // _fetchAppointmentsFromBackend();
+    _fetchAppointments();
   }
 
-  // TODO: API INTEGRATION - Add this method to fetch appointments
-  // Future<void> _fetchAppointmentsFromBackend() async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('YOUR_BACKEND_URL/api/appointments?date=${selectedDay.toIso8601String()}'),
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_API_KEY',
-  //         'Content-Type': 'application/json',
-  //       },
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = json.decode(response.body) as List;
-  //       if (mounted) {
-  //         setState(() {
-  //           appointments.clear();
-  //           for (var item in data) {
-  //             final hour = item['time'] as int;
-  //             final name = item['name'] as String;
-  //             final status = item['status'] as String;
-  //
-  //             final Color statusColor = status == 'Completed'
-  //                 ? const Color(0xFF22C55E)
-  //                 : status == 'Pending'
-  //                 ? const Color(0xFFF59E0B)
-  //                 : const Color(0xFFEF4444);
-  //
-  //             appointments[hour] = SlotData(name, statusColor);
-  //           }
-  //         });
-  //       }
-  //     }
-  //   } catch (e) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error loading appointments: $e')),
-  //       );
-  //     }
-  //   }
-  // }
+  Future<void> _fetchAppointments() async {
+    try {
+      final allAppointments = await AppointmentService.getAllAppointments();
+      
+      if (mounted) {
+        setState(() {
+          _allAppointments = allAppointments;
+          _loadAppointmentsForDay(selectedDay);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    }
+  }
 
-  // TODO: API INTEGRATION - Add this method to save new appointment
-  // Future<void> _saveAppointmentToBackend(String name, int hour, String status) async {
-  //   try {
-  //     final response = await http.post(
-  //       Uri.parse('YOUR_BACKEND_URL/api/appointments'),
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_API_KEY',
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: json.encode({
-  //         'name': name,
-  //         'time': hour,
-  //         'date': selectedDay.toIso8601String(),
-  //         'status': status,
-  //       }),
-  //     );
-  //
-  //     if (response.statusCode == 201) {
-  //       final Color statusColor = status == 'Completed'
-  //           ? const Color(0xFF22C55E)
-  //           : status == 'Pending'
-  //           ? const Color(0xFFF59E0B)
-  //           : const Color(0xFFEF4444);
-  //
-  //       if (mounted) {
-  //         setState(() {
-  //           appointments[hour] = SlotData(name, statusColor);
-  //         });
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           SnackBar(content: Text('Session added for $name at ${_formatHour12(hour)}')),
-  //         );
-  //       }
-  //     }
-  //   } catch (e) {
+  void _loadAppointmentsForDay(DateTime day) {
+    appointments.clear();
+    final dayStr = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    
+    for (var apt in _allAppointments) {
+      if (apt.date == dayStr) {
+        final timeParts = apt.time.split(':');
+        final hour = int.tryParse(timeParts[0]) ?? 0;
+        
+        final Color statusColor = apt.status == 'completed'
+            ? const Color(0xFF22C55E)
+            : apt.status == 'pending'
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFEF4444);
+        
+        appointments[hour] = SlotData(apt.childName, statusColor);
+      }
+    }
+  }
+
+  String _formatHour12(int hour24) {
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    int hour = hour24 % 12;
+    if (hour == 0) hour = 12;
+    final label = hour.toString().padLeft(2, '0');
+    return '$label:00 $period';
+  }
+
+  void _showAddAppointmentDialog() {
+    final formKey = GlobalKey<FormState>();
+    final childNameCtrl = TextEditingController();
+    final therapistNameCtrl = TextEditingController();
+    final sessionTypeCtrl = TextEditingController();
+    String selectedHour = '09';
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Text('Schedule Session'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: childNameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Child Name',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: therapistNameCtrl,
+                    decoration: InputDecoration(
+                      labelText: 'Therapist Name',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: sessionTypeCtrl.text.isEmpty ? 'Writing' : sessionTypeCtrl.text,
+                    decoration: InputDecoration(
+                      labelText: 'Session Type',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    items: ['Writing', 'Pre-Writing', 'Sentence', 'General']
+                        .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) sessionTypeCtrl.text = value;
+                    },
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedHour,
+                    decoration: InputDecoration(
+                      labelText: 'Time',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    items: List.generate(24, (i) {
+                      final hour = i.toString().padLeft(2, '0');
+                      return DropdownMenuItem(value: hour, child: Text('$hour:00'));
+                    }),
+                    onChanged: (value) {
+                      if (value != null) setState(() => selectedHour = value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (formKey.currentState!.validate()) {
+                        setState(() => isSubmitting = true);
+
+                        try {
+                          final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
+                          
+                          await AppointmentService.addAppointment(
+                            childName: childNameCtrl.text,
+                            therapistName: therapistNameCtrl.text,
+                            sessionType: sessionTypeCtrl.text,
+                            date: dayStr,
+                            time: '$selectedHour:00',
+                          );
+
+                          Navigator.pop(ctx);
+                          await _fetchAppointments();
+                          if (mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Session scheduled for ${childNameCtrl.text}')),
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() => isSubmitting = false);
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
+                            );
+                          }
+                        }
+                      }
+                    },
+              child: isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Schedule'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
   //     if (mounted) {
   //       ScaffoldMessenger.of(context).showSnackBar(
   //         SnackBar(content: Text('Error saving appointment: $e')),
@@ -106,52 +198,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
   //   }
   // }
 
-  // TODO: API INTEGRATION - Add this method to update appointment
-  // Future<void> _updateAppointmentOnBackend(int hour, String name, String status) async {
-  //   try {
-  //     final response = await http.put(
-  //       Uri.parse('YOUR_BACKEND_URL/api/appointments/$hour'),
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_API_KEY',
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: json.encode({
-  //         'name': name,
-  //         'status': status,
-  //         'date': selectedDay.toIso8601String(),
-  //       }),
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final Color statusColor = status == 'Completed'
-  //           ? const Color(0xFF22C55E)
-  //           : status == 'Pending'
-  //           ? const Color(0xFFF59E0B)
-  //           : const Color(0xFFEF4444);
-  //
-  //       if (mounted) {
-  //         setState(() {
-  //           appointments[hour] = SlotData(name, statusColor);
-  //         });
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           const SnackBar(content: Text('Appointment updated')),
-  //         );
-  //       }
-  //     }
-  //   } catch (e) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error updating appointment: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  // TODO: API INTEGRATION - Add this method to delete appointment
-  // Future<void> _deleteAppointmentFromBackend(int hour) async {
-  //   try {
-  //     final response = await http.delete(
-  //       Uri.parse('YOUR_BACKEND_URL/api/appointments/$hour?date=${selectedDay.toIso8601String()}'),
   //       headers: {
   //         'Authorization': 'Bearer YOUR_API_KEY',
   //         'Content-Type': 'application/json',
@@ -205,14 +251,9 @@ class _AppointmentSectionState extends State<AppointmentSection> {
             RoundAction(
               icon: Icons.add,
               label: 'Add Session',
-              onTap: () => _inlineShowAddSessionDialog(context),
+              onTap: _showAddAppointmentDialog,
             ),
             const SizedBox(width: 16.0),
-            RoundAction(
-              icon: Icons.notifications_none,
-              label: 'Set\nReminder',
-              onTap: () => _inlineShowSetReminderDialog(context),
-            ),
           ],
         ),
         const SizedBox(height: 12.0),
@@ -355,7 +396,7 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                 ),
                 const SizedBox(height: 16.0),
                 DropdownButtonFormField<String>(
-                  value: selectedStatus,
+                  initialValue: selectedStatus,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(
@@ -382,10 +423,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
             TextButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
-                // TODO: API INTEGRATION - Call backend delete method
-                // _deleteAppointmentFromBackend(hour);
-
-                // REMOVE THIS BLOCK AFTER API INTEGRATION ↓↓↓
                 if (mounted) {
                   setState(() {
                     appointments.remove(hour);
@@ -394,7 +431,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                     const SnackBar(content: Text('Appointment deleted')),
                   );
                 }
-                // REMOVE THIS BLOCK AFTER API INTEGRATION ↑↑↑
               },
               child: const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
@@ -403,10 +439,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                 if (formKey.currentState!.validate()) {
                   final name = nameCtrl.text;
                   Navigator.of(ctx).pop();
-                  // TODO: API INTEGRATION - Call backend update method
-                  // _updateAppointmentOnBackend(hour, name, selectedStatus);
-
-                  // REMOVE THIS BLOCK AFTER API INTEGRATION ↓↓↓
                   final Color statusColor = selectedStatus == 'Completed'
                       ? const Color(0xFF22C55E)
                       : selectedStatus == 'Pending'
@@ -421,111 +453,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                       const SnackBar(content: Text('Appointment updated')),
                     );
                   }
-                  // REMOVE THIS BLOCK AFTER API INTEGRATION ↑↑↑
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _inlineShowAddSessionDialog(BuildContext context) {
-    final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController();
-    int? selectedHour;
-    String selectedStatus = 'Pending';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Add Session'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Required' : null,
-                ),
-                const SizedBox(height: 16.0),
-                DropdownButtonFormField<int>(
-                  value: selectedHour,
-                  decoration: const InputDecoration(labelText: 'Time'),
-                  hint: const Text('Select time'),
-                  items: List.generate(24, (i) {
-                    final timeStr = _formatHour12(i);
-                    return DropdownMenuItem(value: i, child: Text(timeStr));
-                  }),
-                  onChanged: (val) {
-                    setDialogState(() => selectedHour = val);
-                  },
-                  validator: (v) => v == null ? 'Required' : null,
-                ),
-                const SizedBox(height: 16.0),
-                DropdownButtonFormField<String>(
-                  value: selectedStatus,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Completed',
-                      child: Text('Completed'),
-                    ),
-                    DropdownMenuItem(value: 'Pending', child: Text('Pending')),
-                    DropdownMenuItem(value: 'Missed', child: Text('Missed')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => selectedStatus = val);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (formKey.currentState!.validate()) {
-                  final name = nameCtrl.text;
-                  final hour = selectedHour!;
-
-                  Navigator.of(ctx).pop();
-
-                  // TODO: API INTEGRATION - Call backend save method
-                  // _saveAppointmentToBackend(name, hour, selectedStatus);
-
-                  // REMOVE THIS BLOCK AFTER API INTEGRATION ↓↓↓
-                  final Color statusColor = selectedStatus == 'Completed'
-                      ? const Color(0xFF22C55E)
-                      : selectedStatus == 'Pending'
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFFEF4444);
-
-                  if (mounted) {
-                    setState(() {
-                      appointments[hour] = SlotData(name, statusColor);
-                    });
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Session added for $name at ${_formatHour12(hour)}',
-                        ),
-                      ),
-                    );
-                  }
-                  // REMOVE THIS BLOCK AFTER API INTEGRATION ↑↑↑
                 }
               },
               child: const Text('Save'),
@@ -538,8 +465,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
 
   void _shiftDays(int delta) =>
       setState(() => selectedDay = selectedDay.add(Duration(days: delta)));
-  // TODO: API INTEGRATION - Fetch appointments for new date
-  // _fetchAppointmentsFromBackend();
 
   String _formatMonthYear(DateTime d) {
     const months = [
@@ -561,70 +486,10 @@ class _AppointmentSectionState extends State<AppointmentSection> {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
-
-  String _formatHour12(int hour24) {
-    final period = hour24 >= 12 ? 'PM' : 'AM';
-    int hour = hour24 % 12;
-    if (hour == 0) hour = 12;
-    final label = hour.toString().padLeft(2, '0');
-    return '$label:00 $period';
-  }
 }
 
-void _inlineShowSetReminderDialog(BuildContext context) {
-  final formKey = GlobalKey<FormState>();
-  final noteCtrl = TextEditingController();
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Set Reminder'),
-      content: Form(
-        key: formKey,
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: SizedBox(
-            width: 220.0,
-            child: TextFormField(
-              controller: noteCtrl,
-              minLines: 1,
-              maxLines: 1,
-              decoration: const InputDecoration(
-                labelText: 'Reminder note',
-                hintText: 'Short note',
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 12.0,
-                  vertical: 8.0,
-                ),
-              ),
-              style: const TextStyle(fontSize: 14.0),
-              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (formKey.currentState!.validate()) {
-              Navigator.of(ctx).pop();
-              // TODO: API INTEGRATION - Save reminder to backend
-              // _saveReminderToBackend(noteCtrl.text);
-
-              // REMOVE THIS LINE AFTER API INTEGRATION ↓
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('Reminder set')));
-              // REMOVE THIS LINE AFTER API INTEGRATION ↑
-            }
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    ),
-  );
+extension StringExtension on String {
+  String capitalize() {
+    return '${this[0].toUpperCase()}${substring(1)}';
+  }
 }

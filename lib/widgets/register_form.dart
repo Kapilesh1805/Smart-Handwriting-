@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
+import '../screens/dashboard_page.dart';
 
 class RegisterForm extends StatefulWidget {
   final VoidCallback? onBackTap;
@@ -17,6 +19,8 @@ class _RegisterFormState extends State<RegisterForm> {
   final _confirmPasswordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -27,21 +31,45 @@ class _RegisterFormState extends State<RegisterForm> {
     super.dispose();
   }
 
-  void _handleRegister() {
+  void _handleRegister() async {
     if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Registration successful! Please login.'),
-          backgroundColor: Colors.green,
-          duration: Duration(milliseconds: 1500),
-        ),
-      );
-
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted && widget.onBackTap != null) {
-          widget.onBackTap!();
-        }
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
       });
+
+      try {
+        await AuthService.register(
+          name: _nameController.text.trim(),
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created successfully! Welcome!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+
+          // Navigate to Dashboard after showing success message
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const DashboardPage()),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+            _isLoading = false;
+          });
+        }
+      }
     }
   }
 
@@ -52,6 +80,24 @@ class _RegisterFormState extends State<RegisterForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              margin: const EdgeInsets.only(bottom: 16.0),
+              decoration: BoxDecoration(
+                color: Colors.red[100],
+                border: Border.all(color: Colors.red[400]!, width: 1),
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(
+                  color: Colors.red[800],
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
           _buildTextField(
             controller: _nameController,
             label: 'Full Name',
@@ -150,7 +196,7 @@ class _RegisterFormState extends State<RegisterForm> {
           const SizedBox(height: 24.0),
 
           ElevatedButton(
-            onPressed: _handleRegister,
+            onPressed: _isLoading ? null : _handleRegister,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF2D3748),
               foregroundColor: Colors.white,
@@ -160,14 +206,23 @@ class _RegisterFormState extends State<RegisterForm> {
               ),
               elevation: 0,
             ),
-            child: const Text(
-              'CREATE ACCOUNT',
-              style: TextStyle(
-                fontSize: 16.0,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-            ),
+            child: _isLoading
+                ? const SizedBox(
+                    height: 20.0,
+                    width: 20.0,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.0,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'CREATE ACCOUNT',
+                    style: TextStyle(
+                      fontSize: 16.0,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
           ),
         ],
       ),

@@ -4,11 +4,19 @@ import 'package:http/http.dart' as http;
 import '../models/pre_writing_shape.dart';
 import '../models/child_profile.dart';
 import '../utils/drawing_service.dart';
-import '../utils/child_service.dart';
+import '../services/child_service.dart';
+import '../config/api_config.dart';
 import '../widgets/unified_writing_canvas.dart';
 
 class PreWritingSection extends StatefulWidget {
-  const PreWritingSection({super.key});
+  final String? childId;
+  final String? childName;
+  
+  const PreWritingSection({
+    super.key,
+    this.childId,
+    this.childName,
+  });
 
   @override
   State<PreWritingSection> createState() => _PreWritingSectionState();
@@ -44,13 +52,29 @@ class _PreWritingSectionState extends State<PreWritingSection> {
 
   Future<void> _loadChildren() async {
     try {
-      final children = await ChildService.fetchChildren();
+      final userId = await Config.getUserId();
+      if (userId == null) {
+        debugPrint('User not authenticated');
+        return;
+      }
+      final children = await ChildService.getChildren(userId: userId);
       if (mounted) {
         setState(() {
-          childrenList = children;
-          if (children.isNotEmpty) {
-            selectedChildId = children.first.id;
-            selectedChildName = children.first.name;
+          // Convert Child objects to ChildProfile objects
+          childrenList = children.map((child) => ChildProfile(
+            id: child.childId,
+            name: child.name,
+            age: child.age.toString(),
+            grade: 'N/A',
+            avatar: child.name.isNotEmpty ? child.name[0].toUpperCase() : '👦',
+          )).toList();
+          // If child was passed via constructor, select it
+          if (widget.childId != null) {
+            selectedChildId = widget.childId;
+            selectedChildName = widget.childName;
+          } else if (childrenList.isNotEmpty) {
+            selectedChildId = childrenList.first.id;
+            selectedChildName = childrenList.first.name;
           }
         });
       }

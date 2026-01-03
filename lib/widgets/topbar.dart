@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 class TopBar extends StatelessWidget {
-  const TopBar({super.key});
+  final String? userName;
+  
+  const TopBar({super.key, this.userName});
 
   @override
   Widget build(BuildContext context) {
@@ -91,19 +93,34 @@ class TopBar extends StatelessWidget {
             isDarkMode: isDarkMode,
           ),
           const SizedBox(width: 16.0),
-          CircleAvatar(
-            radius: 18.0,
-            // ==================== USE THEME COLOR ====================
-            backgroundColor: isDarkMode
-                ? Colors.grey.shade800
-                : const Color(0xFFEFF3F9),
-            child: Icon(
-              Icons.person,
-              color: isDarkMode
-                  ? Colors.grey.shade300
-                  : const Color(0xFF2D3748),
-            ),
-            // ==================================================
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18.0,
+                // ==================== USE THEME COLOR ====================
+                backgroundColor: isDarkMode
+                    ? Colors.grey.shade800
+                    : const Color(0xFFEFF3F9),
+                child: Icon(
+                  Icons.person,
+                  color: isDarkMode
+                      ? Colors.grey.shade300
+                      : const Color(0xFF2D3748),
+                ),
+                // ==================================================
+              ),
+              const SizedBox(width: 8.0),
+              Text(
+                userName ?? 'User',
+                style: TextStyle(
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w600,
+                  color: isDarkMode
+                      ? Colors.grey.shade300
+                      : const Color(0xFF2D3748),
+                ),
+              ),
+            ],
           ),
         ],
       ),

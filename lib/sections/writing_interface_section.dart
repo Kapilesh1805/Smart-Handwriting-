@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../widgets/unified_writing_canvas.dart';
-import '../utils/child_service.dart';
+import '../services/child_service.dart';
+import '../config/api_config.dart';
 import '../models/child_profile.dart';
 
 class WritingInterfaceSection extends StatefulWidget {
-  const WritingInterfaceSection({super.key});
+  final String? childId;
+  final String? childName;
+  
+  const WritingInterfaceSection({
+    super.key,
+    this.childId,
+    this.childName,
+  });
 
   @override
   State<WritingInterfaceSection> createState() =>
@@ -117,16 +125,39 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
     super.initState();
     _checkBackendStatus();
     _loadChildren();
+    
+    // Pre-select child if passed from navigation
+    if (widget.childId != null) {
+      selectedChildId = widget.childId;
+      selectedChildName = widget.childName;
+    }
   }
 
   Future<void> _loadChildren() async {
     try {
-      final children = await ChildService.fetchChildren();
+      final userId = await Config.getUserId();
+      if (userId == null) {
+        debugPrint('User not authenticated');
+        return;
+      }
+      final children = await ChildService.getChildren(userId: userId);
       setState(() {
-        childrenList = children;
-        if (children.isNotEmpty) {
-          selectedChildId = children.first.id;
-          selectedChildName = children.first.name;
+        // Convert Child objects to ChildProfile objects
+        childrenList = children.map((child) => ChildProfile(
+          id: child.childId,
+          name: child.name,
+          age: child.age.toString(),
+          grade: 'N/A',
+          avatar: child.name.isNotEmpty ? child.name[0].toUpperCase() : '👦',
+        )).toList();
+        
+        // If child was passed, select it; otherwise select first
+        if (widget.childId != null) {
+          selectedChildId = widget.childId;
+          selectedChildName = widget.childName;
+        } else if (childrenList.isNotEmpty) {
+          selectedChildId = childrenList.first.id;
+          selectedChildName = childrenList.first.name;
         }
       });
     } catch (e) {

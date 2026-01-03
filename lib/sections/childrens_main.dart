@@ -1,12 +1,23 @@
 import 'package:flutter/material.dart';
 import '../models/child_profile.dart';
 import '../widgets/child_card.dart';
-import '../utils/child_service.dart';
+import '../services/child_service.dart' as new_service;
+import '../utils/child_service.dart' as old_service;
+import '../config/api_config.dart';
 import '../sections/writing_interface_section.dart';
 import '../sections/assessment_report_section.dart';
+import '../sections/pre_writing_section.dart';
+import '../sections/sentence_section.dart';
 
 class ChildrensMain extends StatefulWidget {
-  const ChildrensMain({super.key});
+  final List children;
+  final Function onRefresh;
+
+  const ChildrensMain({
+    super.key,
+    this.children = const [],
+    required this.onRefresh,
+  });
 
   @override
   State<ChildrensMain> createState() => _ChildrensMainState();
@@ -15,23 +26,56 @@ class ChildrensMain extends StatefulWidget {
 class _ChildrensMainState extends State<ChildrensMain> {
   List<ChildProfile> childrenList = [];
   bool isLoading = false;
+  String? _userId;
 
   @override
   void initState() {
     super.initState();
-    _fetchChildren();
+    _loadUserIdAndFetchChildren();
   }
 
-  // Fetch children from backend
+  @override
+  void didUpdateWidget(covariant ChildrensMain oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // When parent passes new children list, refresh ours
+    if (oldWidget.children.length != widget.children.length) {
+      _fetchChildren();
+    }
+  }
+
+  Future<void> _loadUserIdAndFetchChildren() async {
+    final userId = await Config.getUserId();
+    if (mounted) {
+      setState(() {
+        _userId = userId;
+      });
+      _fetchChildren();
+    }
+  }
+
+  // Fetch children from backend using new service
   Future<void> _fetchChildren() async {
+    if (_userId == null) return;
+    
     setState(() {
       isLoading = true;
     });
     try {
-      final children = await ChildService.fetchChildren();
+      final children = await new_service.ChildService.getChildren(userId: _userId!);
       if (mounted) {
         setState(() {
-          childrenList = children;
+          // Convert new_service.Child to old ChildProfile for compatibility
+          childrenList = children.map((child) {
+            return ChildProfile(
+              id: child.childId,
+              name: child.name,
+              age: child.age.toString(),
+              grade: 'Grade',
+              avatar: child.name[0].toUpperCase(),
+              lastAssessment: 'Not assessed',
+              assessmentStatus: 'Pending',
+            );
+          }).toList();
           isLoading = false;
         });
       }
@@ -51,22 +95,7 @@ class _ChildrensMainState extends State<ChildrensMain> {
     final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController();
     final ageCtrl = TextEditingController();
-    final gradeCtrl = TextEditingController();
-    String? selectedAvatar;
     bool isSubmitting = false;
-
-    final List<String> avatarOptions = [
-      '👦',
-      '👧',
-      '🧒',
-      '👶',
-      '🧑',
-      '👨',
-      '👩',
-      '🙂',
-      '😊',
-      '🌟',
-    ];
 
     showDialog(
       context: context,
@@ -79,7 +108,6 @@ class _ChildrensMainState extends State<ChildrensMain> {
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   TextFormField(
                     controller: nameCtrl,
@@ -87,73 +115,31 @@ class _ChildrensMainState extends State<ChildrensMain> {
                       labelText: 'Child Name',
                       prefixIcon: Icon(Icons.person),
                     ),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Required' : null,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Name is required';
+                      if (v.trim().length < 2) return 'Name must be at least 2 characters';
+                      return null;
+                    },
+                    enabled: !isSubmitting,
                   ),
                   const SizedBox(height: 16.0),
                   TextFormField(
                     controller: ageCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Age',
+                      labelText: 'Age (1-18)',
                       prefixIcon: Icon(Icons.cake),
                       hintText: 'e.g., 8',
                     ),
                     validator: (v) {
-                      if (v == null || v.isEmpty) return 'Required';
-                      if (int.tryParse(v) == null) return 'Enter valid age';
+                      if (v == null || v.isEmpty) return 'Age is required';
+                      final age = int.tryParse(v);
+                      if (age == null || age < 1 || age > 18) {
+                        return 'Age must be between 1 and 18';
+                      }
                       return null;
                     },
-                  ),
-                  const SizedBox(height: 16.0),
-                  TextFormField(
-                    controller: gradeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Grade',
-                      prefixIcon: Icon(Icons.school),
-                      hintText: 'e.g., Grade 2 or 2',
-                    ),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 20.0),
-                  const Text(
-                    'Choose Avatar',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  const SizedBox(height: 12.0),
-                  Wrap(
-                    spacing: 8.0,
-                    runSpacing: 8.0,
-                    children: avatarOptions.map((emoji) {
-                      final isSelected = selectedAvatar == emoji;
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => selectedAvatar = emoji),
-                        child: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Colors.blue.shade100
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Colors.blue.shade600
-                                  : Colors.grey.shade300,
-                              width: isSelected ? 3 : 1,
-                            ),
-                          ),
-                          child: Center(
-                            child: Text(
-                              emoji,
-                              style: const TextStyle(fontSize: 28),
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                    enabled: !isSubmitting,
                   ),
                 ],
               ),
@@ -174,33 +160,35 @@ class _ChildrensMainState extends State<ChildrensMain> {
                         });
 
                         try {
-                          final child = await ChildService.addChild(
-                            name: nameCtrl.text,
-                            age: ageCtrl.text,
-                            grade: gradeCtrl.text,
-                            avatar: selectedAvatar ?? '👦',
+                          await new_service.ChildService.addChild(
+                            userId: _userId ?? '',
+                            name: nameCtrl.text.trim(),
+                            age: int.parse(ageCtrl.text),
+                            notes: '',
                           );
 
                           if (mounted) {
-                            setState(() {
-                              childrenList.add(child);
-                            });
                             Navigator.of(ctx).pop();
+                            _fetchChildren();
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('${nameCtrl.text} added successfully'),
+                                backgroundColor: Colors.green,
                               ),
                             );
                           }
                         } catch (e) {
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
                           setDialogState(() {
                             isSubmitting = false;
                           });
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
                         }
                       }
                     },
@@ -218,7 +206,6 @@ class _ChildrensMainState extends State<ChildrensMain> {
     ).then((_) {
       nameCtrl.dispose();
       ageCtrl.dispose();
-      gradeCtrl.dispose();
     });
   }
 
@@ -237,21 +224,25 @@ class _ChildrensMainState extends State<ChildrensMain> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               try {
-                await ChildService.deleteChild(childId);
+                await new_service.ChildService.deleteChild(childId: childId);
                 if (mounted) {
-                  setState(() {
-                    childrenList.removeWhere((child) => child.id == childId);
-                  });
                   Navigator.of(ctx).pop();
+                  _fetchChildren();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('$childName removed')),
+                    SnackBar(
+                      content: Text('$childName removed'),
+                      backgroundColor: Colors.green,
+                    ),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   Navigator.of(ctx).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
                   );
                 }
               }
@@ -363,14 +354,9 @@ class _ChildrensMainState extends State<ChildrensMain> {
                   );
                 },
                 
-                // Navigate to Writing Interface Section for this child
+                // Navigate to test section based on selection
                 onStartTest: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => WritingInterfaceSection(),
-                    ),
-                  );
+                  _showTestTypeMenu(context, child);
                 },
                 
                 // ==================== BACKEND NAVIGATION - UNCOMMENT WHEN READY ====================
@@ -397,6 +383,67 @@ class _ChildrensMainState extends State<ChildrensMain> {
             },
           ),
       ],
+    );
+  }
+
+  void _showTestTypeMenu(BuildContext context, ChildProfile child) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Test Type for ${child.name}'),
+        content: const Text('Which assessment would you like to perform?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WritingInterfaceSection(
+                    childId: child.id,
+                    childName: child.name,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Writing Practice'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PreWritingSection(
+                    childId: child.id,
+                    childName: child.name,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Pre-Writing Shapes'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SentenceSection(
+                    childId: child.id,
+                    childName: child.name,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Sentence Writing'),
+          ),
+        ],
+      ),
     );
   }
 }

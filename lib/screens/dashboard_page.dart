@@ -11,6 +11,8 @@ import '../sections/assessment_report_section.dart';
 import '../sections/pre_writing_section.dart';
 import '../sections/settings_section.dart';
 import '../sections/sentence_section.dart';
+import '../services/child_service.dart';
+import '../config/api_config.dart';
 
 class DashboardPage extends StatefulWidget {
   final List<AppointmentItem> appointments;
@@ -23,50 +25,81 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   String _selectedSection = 'Dashboard';
+  
+  // State variables for API data
+  UserProfile? _currentUser;
+  List<Child> _children = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  String? _userId;
+  String? _userName;
 
-  // TODO: API INTEGRATION - Add user profile state variable
   @override
   void initState() {
     super.initState();
-    // TODO: API INTEGRATION - Fetch user profile when dashboard loads
-    // _fetchUserProfile();
+    _initializeDashboard();
   }
 
-  // TODO: API INTEGRATION - Add this method to fetch user profile from backend
-  // Future<void> _fetchUserProfile() async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('YOUR_BACKEND_URL/api/user/profile'),
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_API_KEY',
-  //         'Content-Type': 'application/json',
-  //       },
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = json.decode(response.body);
-  //       if (mounted) {
-  //         setState(() {
-  //           _currentUser = UserProfile(
-  //             name: data['name'] ?? 'User',
-  //             occupation: data['occupation'] ?? 'Therapist',
-  //           );
-  //         });
-  //       }
-  //     } else {
-  //       print('Failed to load user profile: ${response.statusCode}');
-  //     }
-  //   } catch (e) {
-  //     print('Error fetching user profile: $e');
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Could not load profile: $e')),
-  //       );
-  //     }
-  //   }
-  // }
+  /// Initialize dashboard by loading user profile and children list
+  Future<void> _initializeDashboard() async {
+    try {
+      // Get user ID from SharedPreferences
+      _userId = await Config.getUserId();
+      _userName = await Config.getUserName();
+      
+      if (_userId == null) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/login');
+        }
+        return;
+      }
 
-  // UserProfile? _currentUser;
+      // Fetch children for this user
+      await _fetchChildren();
+      
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Fetch children list from backend
+  Future<void> _fetchChildren() async {
+    try {
+      if (_userId == null) {
+        throw Exception('User not authenticated');
+      }
+
+      final children = await ChildService.getChildren(userId: _userId!);
+      
+      if (mounted) {
+        setState(() {
+          _children = children;
+          _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  /// Refresh children list (called after add/edit/delete operations)
+  Future<void> _refreshChildren() async {
+    await _fetchChildren();
+  }
 
   void _onSelectSection(String label) {
     setState(() {
@@ -76,14 +109,57 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ==================== GET THEME ====================
     final theme = Theme.of(context);
-    // ==================================================
+
+    // Show loading indicator while initializing
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    // Show error message if failed to load
+    if (_errorMessage != null) {
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                'Error loading dashboard',
+                style: theme.textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage ?? 'Unknown error',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _errorMessage = null;
+                  });
+                  _initializeDashboard();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
-      // ==================== USE THEME BACKGROUND ====================
       backgroundColor: theme.scaffoldBackgroundColor,
-      // ==================================================
       body: SafeArea(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,7 +171,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: Column(
                 children: [
-                  const TopBar(),
+                  TopBar(userName: _userName),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(24.0),
@@ -107,30 +183,33 @@ class _DashboardPageState extends State<DashboardPage> {
                             child: _selectedSection == 'Appointment'
                                 ? const AppointmentSection()
                                 : _selectedSection == 'Writing Interface'
-                                ? const WritingInterfaceSection()
-                                : _selectedSection == 'Report'
-                                ? const AssessmentReportSection(
-                                    childId: 'child_123',
-                                  )
-                                : _selectedSection == 'Childrens'
-                                ? const ChildrensMain()
-                                : _selectedSection == 'Pre writing'
-                                ? const PreWritingSection()
-                                : _selectedSection == 'Sentence Writing'
-                                ? const SentenceSection()
-                                : _selectedSection == 'Settings'
-                                ? const SettingsSection()
-                                : const DashboardSection(),
+                                    ? const WritingInterfaceSection()
+                                    : _selectedSection == 'Report'
+                                        ? const AssessmentReportSection(
+                                            childId: 'child_123',
+                                          )
+                                        : _selectedSection == 'Childrens'
+                                            ? ChildrensMain(
+                                                children: _children,
+                                                onRefresh: _refreshChildren,
+                                              )
+                                            : _selectedSection == 'Pre writing'
+                                                ? const PreWritingSection()
+                                                : _selectedSection == 'Sentence Writing'
+                                                    ? const SentenceSection()
+                                                    : _selectedSection == 'Settings'
+                                                        ? const SettingsSection()
+                                                        : DashboardSection(
+                                                            children: _children,
+                                                            onRefresh: _refreshChildren,
+                                                          ),
                           ),
                           const SizedBox(width: 24.0),
                           Expanded(
                             flex: 1,
                             child: RightPanel(
                               appointments: widget.appointments,
-                              // TODO: API INTEGRATION - Replace widget.user with _currentUser
-                              // user: _currentUser, // USE THIS INSTEAD
-                              user: widget
-                                  .user, // ← REMOVE THIS LINE after API integration
+                              user: _currentUser ?? widget.user,
                             ),
                           ),
                         ],

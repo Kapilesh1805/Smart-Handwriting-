@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../screens/dashboard_page.dart';
+import '../services/auth_service.dart';
 
 class LoginForm extends StatefulWidget {
   final VoidCallback? onSignUpTap;
@@ -17,6 +18,7 @@ class _LoginFormState extends State<LoginForm> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
   bool _rememberMe = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -29,35 +31,40 @@ class _LoginFormState extends State<LoginForm> {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
+        _errorMessage = null;
       });
-      
-      await Future.delayed(const Duration(seconds: 1));
-      
-      setState(() {
-        _isLoading = false;
-      });
-      
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DashboardPage()),
+
+      try {
+        await AuthService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
+
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const DashboardPage()),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _errorMessage = e.toString().replaceFirst('Exception: ', '');
+            _isLoading = false;
+          });
+        }
       }
     }
   }
 
   void _showForgotPasswordDialog() {
     final formKey = GlobalKey<FormState>();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
+    final emailController = TextEditingController();
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        bool isNewPasswordVisible = false;
-        bool isConfirmPasswordVisible = false;
-        bool isSubmitting = false;
-
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -76,23 +83,10 @@ class _LoginFormState extends State<LoginForm> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
-                      controller: newPasswordController,
-                      obscureText: !isNewPasswordVisible,
+                      controller: emailController,
                       decoration: InputDecoration(
-                        labelText: 'New password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            isNewPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              isNewPasswordVisible = !isNewPasswordVisible;
-                            });
-                          },
-                        ),
+                        labelText: 'Email address',
+                        prefixIcon: const Icon(Icons.email_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8.0),
                         ),
@@ -103,47 +97,11 @@ class _LoginFormState extends State<LoginForm> {
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Please enter a new password';
+                          return 'Please enter your email';
                         }
-                        if (value.length < 6) {
-                          return 'Password must be at least 6 characters';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16.0),
-                    TextFormField(
-                      controller: confirmPasswordController,
-                      obscureText: !isConfirmPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            isConfirmPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              isConfirmPasswordVisible = !isConfirmPasswordVisible;
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16.0,
-                          vertical: 16.0,
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please confirm your password';
-                        }
-                        if (value != newPasswordController.text) {
-                          return 'Passwords do not match';
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                            .hasMatch(value)) {
+                          return 'Please enter a valid email';
                         }
                         return null;
                       },
@@ -168,15 +126,37 @@ class _LoginFormState extends State<LoginForm> {
                             setState(() {
                               isSubmitting = true;
                             });
-                            await Future.delayed(const Duration(seconds: 1));
-                            if (mounted) {
-                              Navigator.of(dialogContext).pop();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Password reset successful'),
-                                  backgroundColor: Colors.green,
-                                ),
+
+                            try {
+                              await AuthService.forgotPassword(
+                                email: emailController.text.trim(),
                               );
+
+                              if (mounted) {
+                                Navigator.of(dialogContext).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Password reset link sent to your email',
+                                    ),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      e.toString().replaceFirst('Exception: ', ''),
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                              setState(() {
+                                isSubmitting = false;
+                              });
                             }
                           }
                         },
@@ -194,7 +174,7 @@ class _LoginFormState extends State<LoginForm> {
                                 AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
-                      : const Text('Submit'),
+                      : const Text('Send Link'),
                 ),
               ],
             );
@@ -202,8 +182,7 @@ class _LoginFormState extends State<LoginForm> {
         );
       },
     ).then((_) {
-      newPasswordController.dispose();
-      confirmPasswordController.dispose();
+      emailController.dispose();
     });
   }
 
@@ -214,6 +193,24 @@ class _LoginFormState extends State<LoginForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              margin: const EdgeInsets.only(bottom: 16.0),
+              decoration: BoxDecoration(
+                color: Colors.red[100],
+                border: Border.all(color: Colors.red[400]!, width: 1),
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: TextStyle(
+                  color: Colors.red[800],
+                  fontSize: 14.0,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
           _buildTextField(
             controller: _emailController,
             label: 'Email',
