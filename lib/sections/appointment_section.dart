@@ -273,7 +273,12 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                   child: DateChip(
                     date: d,
                     isSelected: _isSameDay(d, selectedDay),
-                    onTap: () => setState(() => selectedDay = d),
+                    onTap: () {
+                      setState(() {
+                        selectedDay = d;
+                        _loadAppointmentsForDay(d);
+                      });
+                    },
                   ),
                 ),
               )
@@ -472,8 +477,12 @@ class _AppointmentSectionState extends State<AppointmentSection> {
     );
   }
 
-  void _shiftDays(int delta) =>
-      setState(() => selectedDay = selectedDay.add(Duration(days: delta)));
+  void _shiftDays(int delta) {
+    setState(() {
+      selectedDay = selectedDay.add(Duration(days: delta));
+      _loadAppointmentsForDay(selectedDay);
+    });
+  }
 
   String _formatMonthYear(DateTime d) {
     const months = [
