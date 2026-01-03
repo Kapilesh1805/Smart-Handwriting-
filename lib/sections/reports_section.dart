@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/report_model.dart';
+import '../models/app_models.dart';
 import '../utils/report_service.dart';
-import '../models/child_profile.dart';
-import '../utils/child_service.dart';
+import '../services/child_service.dart';
+import '../config/api_config.dart';
 
 class ReportsSection extends StatefulWidget {
-  const ReportsSection({Key? key}) : super(key: key);
+  const ReportsSection({super.key});
 
   @override
   State<ReportsSection> createState() => _ReportsSectionState();
 }
 
 class _ReportsSectionState extends State<ReportsSection> {
-  List<ChildProfile> childrenList = [];
+  List<Child> childrenList = [];
   String? selectedChildId;
   ChildReport? currentReport;
   bool isLoading = false;
@@ -28,7 +29,9 @@ class _ReportsSectionState extends State<ReportsSection> {
   Future<void> _loadChildren() async {
     setState(() => isLoading = true);
     try {
-      final children = await ChildService.getAllChildren();
+      final userId = await Config.getUserId();
+      if (userId == null) throw Exception('User not authenticated');
+      final children = await ChildService.getChildren(userId: userId);
       setState(() {
         childrenList = children;
         if (children.isNotEmpty) {
@@ -94,8 +97,8 @@ class _ReportsSectionState extends State<ReportsSection> {
                       hint: const Text('Choose a child'),
                       items: childrenList.map((child) {
                         return DropdownMenuItem<String>(
-                          value: child.id,
-                          child: Text(child.name),
+                          value: child.childId,
+                          child: Text(child.childName),
                         );
                       }).toList(),
                       onChanged: (value) {
@@ -419,7 +422,7 @@ class _ReportsSectionState extends State<ReportsSection> {
         minY: 0,
         maxY: 100,
         lineBarsData: [
-          LineBarData(
+          LineChartBarData(
             spots: spots,
             isCurved: true,
             color: color,

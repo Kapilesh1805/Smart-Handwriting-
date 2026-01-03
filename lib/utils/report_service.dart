@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/report_model.dart';
-import 'api_config.dart';
 
 class ReportService {
   static const String _apiUrl = 'http://localhost:5000';
@@ -74,29 +73,6 @@ class ReportService {
     } catch (e) {
       debugPrint('❌ Error fetching report: $e');
       return null;
-    }
-  }
-
-  /// Get all children for selection
-  static Future<List<Map<String, dynamic>>> getAllChildren() async {
-    try {
-      debugPrint('📊 Fetching all children...');
-
-      // Get from SharedPreferences (cached children list)
-      final prefs = await SharedPreferences.getInstance();
-      final childrenJson = prefs.getString('children_list');
-
-      if (childrenJson != null) {
-        final children = jsonDecode(childrenJson) as List<dynamic>;
-        debugPrint('✅ Loaded ${children.length} children from cache');
-        return children.cast<Map<String, dynamic>>();
-      }
-
-      debugPrint('⚠️ No children cached');
-      return [];
-    } catch (e) {
-      debugPrint('❌ Error fetching children: $e');
-      return [];
     }
   }
 
