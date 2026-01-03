@@ -555,39 +555,88 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
               ],
             ),
           ),
-          if (showFeedback) _buildFeedback(),
         ],
       ),
+      bottomSheet: showFeedback ? _buildFeedbackBottomSheet() : null,
     );
   }
 
-  Widget _buildFeedback() {
+  Widget _buildFeedbackBottomSheet() {
     final isError = feedback.contains('❌') || feedback.contains('Error');
     final isWarning = feedback.contains('⚠️');
     final isGood = feedback.contains('✅');
 
     Color bgColor;
+    Color textColor;
     if (isError) {
       bgColor = Colors.red.shade50;
+      textColor = Colors.red.shade900;
     } else if (isWarning) {
       bgColor = Colors.orange.shade50;
+      textColor = Colors.orange.shade900;
     } else if (isGood) {
       bgColor = Colors.green.shade50;
+      textColor = Colors.green.shade900;
     } else {
       bgColor = Colors.blue.shade50;
+      textColor = Colors.blue.shade900;
     }
 
     return Container(
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.all(12),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.4,
+      ),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.shade300),
+        border: Border(top: BorderSide(color: textColor, width: 2)),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
       ),
-      child: Text(
-        feedback,
-        style: const TextStyle(fontSize: 14),
+      child: Column(
+        children: [
+          // Header with close button
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: bgColor,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Analysis Result',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => setState(() => showFeedback = false),
+                  icon: const Icon(Icons.close),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable feedback content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                feedback,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.6,
+                  color: textColor,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
