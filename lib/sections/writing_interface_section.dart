@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../widgets/unified_writing_canvas.dart';
 import '../services/child_service.dart';
+import '../services/handwriting_service.dart';
 import '../config/api_config.dart';
 import '../models/child_profile.dart';
 
@@ -167,13 +168,13 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
 
   Future<void> _checkBackendStatus() async {
     try {
-      final response = await http
-          .get(Uri.parse('http://localhost:8000/api/health'))
-          .timeout(const Duration(seconds: 3));
-      
+      final isConnected = await HandwritingService.checkBackendStatus();
       setState(() {
-        isBackendConnected = response.statusCode == 200;
+        isBackendConnected = isConnected;
       });
+      if (isConnected) {
+        debugPrint('✅ Backend connected');
+      }
     } catch (e) {
       setState(() {
         isBackendConnected = false;
@@ -238,72 +239,106 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
   }
 
   Future<void> _sendToMLModel() async {
+    if (selectedChildId == null) {
+      _showError('Please select a child first');
+      return;
+    }
+
     setState(() {
       isProcessingML = true;
-      feedback = 'Analyzing with ML model...';
+      feedback = '🔄 Analyzing handwriting...';
       showFeedback = true;
     });
 
     try {
-      // Extract pressure points and strokes from canvas
+      // Extract drawing data from canvas
       final strokesData = canvasKey.currentState?.extractStrokes() ?? [];
       final pressureData = canvasKey.currentState?.getPressurePoints() ?? [];
 
-      final response = await http.post(
-        Uri.parse('http://localhost:8000/api/recognize-handwriting'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'character': currentCharacter,
-          'strokes': strokesData,
-          'pressurePoints': pressureData,
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final result = json.decode(response.body);
+      if (strokesData.isEmpty && pressureData.isEmpty) {
+        _showError('Please write something on the canvas first');
         setState(() {
-          mlConfidenceScore = (result['confidence'] ?? 0.0).toDouble();
-          mlFeedback = result;
           isProcessingML = false;
-
-          feedback = _generateMLFeedback(result);
-          showFeedback = true;
         });
-      } else {
-        _showError('Model analysis failed');
+        return;
       }
+
+      print('📊 Canvas data - Strokes: ${strokesData.length}, Pressure points: ${pressureData.length}');
+
+      // Get canvas as image for analysis
+      final imageBase64 = canvasKey.currentState?.getCanvasAsBase64();
+
+      // Send to backend for ML analysis
+      final analysis = await HandwritingService.analyzeHandwriting(
+        childId: selectedChildId!,
+        letter: currentCharacter,
+        imageBase64: imageBase64,
+        strokesData: strokesData,
+        pressureData: pressureData,
+      );
+
+      setState(() {
+        mlConfidenceScore = analysis.overallScore / 100;
+        mlFeedback = {
+          'pressure_score': analysis.pressureScore,
+          'spacing_score': analysis.spacingScore,
+          'formation_score': analysis.formationScore,
+          'accuracy_score': analysis.accuracyScore,
+          'overall_score': analysis.overallScore,
+          'feedback': analysis.feedback,
+          'model_used': analysis.modelUsed,
+        };
+        isProcessingML = false;
+        feedback = _generateMLFeedback(mlFeedback);
+        showFeedback = true;
+      });
+
+      print('✅ Analysis complete');
     } catch (e) {
       setState(() {
         isProcessingML = false;
-        isBackendConnected = false;
       });
-      _showBackendNotConnectedMessage();
-      debugPrint('Error sending to ML model: $e');
+      _showError('Analysis failed: ${e.toString().replaceFirst('Exception: ', '')}');
+      debugPrint('Error analyzing handwriting: $e');
     }
   }
 
   String _generateMLFeedback(Map<String, dynamic> result) {
-    double confidence = (result['confidence'] ?? 0.0).toDouble();
-    List<dynamic> suggestions = result['suggestions'] ?? [];
+    final double overallScore = (result['overall_score'] ?? 0.0).toDouble();
+    final double pressureScore = (result['pressure_score'] ?? 0.0).toDouble();
+    final double spacingScore = (result['spacing_score'] ?? 0.0).toDouble();
+    final double formationScore = (result['formation_score'] ?? 0.0).toDouble();
+    final String feedback = result['feedback'] ?? 'Analysis complete';
+    final bool modelUsed = result['model_used'] ?? false;
 
     String feedbackText = '';
 
-    if (confidence >= 0.85) {
-      feedbackText = '✅ Excellent! Your $currentCharacter looks perfect! (${(confidence * 100).toStringAsFixed(0)}% match)';
-    } else if (confidence >= 0.70) {
-      feedbackText = '👍 Good! Your $currentCharacter is recognizable. (${(confidence * 100).toStringAsFixed(0)}% match)';
-    } else if (confidence >= 0.50) {
-      feedbackText = '⚠️ Your $currentCharacter needs work. (${(confidence * 100).toStringAsFixed(0)}% match)';
+    // Main feedback from ML model
+    feedbackText = feedback;
+
+    // Add model status
+    if (modelUsed) {
+      feedbackText += '\n✅ Real ML model analysis';
     } else {
-      feedbackText = '❌ That doesn\'t look like $currentCharacter. (${(confidence * 100).toStringAsFixed(0)}% match)';
+      feedbackText += '\n📊 Simulated analysis (ML model loading)';
     }
 
-    if (suggestions.isNotEmpty) {
-      feedbackText += '\n\nSuggestions:\n';
-      for (var i = 0; i < suggestions.length && i < 3; i++) {
-        feedbackText += '• ${suggestions[i]}\n';
-      }
+    // Add score breakdown
+    feedbackText += '\n\n📈 Score Breakdown:';
+    feedbackText += '\n• Overall: ${overallScore.toStringAsFixed(1)}%';
+    feedbackText += '\n• Pressure: ${pressureScore.toStringAsFixed(1)}%';
+    feedbackText += '\n• Spacing: ${spacingScore.toStringAsFixed(1)}%';
+    feedbackText += '\n• Formation: ${formationScore.toStringAsFixed(1)}%';
+
+    // Add recommendations
+    if (pressureScore < 70) {
+      feedbackText += '\n\n💪 Tip: Apply more consistent pressure on the pen';
+    }
+    if (spacingScore < 70) {
+      feedbackText += '\n💡 Tip: Improve spacing between strokes';
+    }
+    if (formationScore < 70) {
+      feedbackText += '\n✍️ Tip: Work on letter formation and shape';
     }
 
     return feedbackText;
