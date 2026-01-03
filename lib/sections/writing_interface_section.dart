@@ -514,7 +514,7 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
             Container(
               color: Colors.white,
               padding: const EdgeInsets.all(12),
-              height: 250,
+              height: 400,
               child: UnifiedWritingCanvas(
                 key: canvasKey,
                 onClear: () {},
