@@ -555,13 +555,14 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
               ],
             ),
           ),
+          // FEEDBACK SECTION: Scrollable feedback below buttons
+          if (showFeedback) _buildFeedback(),
         ],
       ),
-      bottomSheet: showFeedback ? _buildFeedbackBottomSheet() : null,
     );
   }
 
-  Widget _buildFeedbackBottomSheet() {
+  Widget _buildFeedback() {
     final isError = feedback.contains('❌') || feedback.contains('Error');
     final isWarning = feedback.contains('⚠️');
     final isGood = feedback.contains('✅');
@@ -584,15 +585,11 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.4,
+        maxHeight: 200,
       ),
       decoration: BoxDecoration(
         color: bgColor,
         border: Border(top: BorderSide(color: textColor, width: 2)),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
       ),
       child: Column(
         children: [
@@ -609,13 +606,13 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
                 const Text(
                   'Analysis Result',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 IconButton(
                   onPressed: () => setState(() => showFeedback = false),
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(Icons.close, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -625,12 +622,12 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
           // Scrollable feedback content
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Text(
                 feedback,
                 style: TextStyle(
-                  fontSize: 14,
-                  height: 1.6,
+                  fontSize: 13,
+                  height: 1.5,
                   color: textColor,
                 ),
               ),
