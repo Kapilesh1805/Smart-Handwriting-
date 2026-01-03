@@ -94,69 +94,106 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
       );
     }
 
-    if (_report == null || childrenList.isEmpty) {
+    // If no children, show loading or error message
+    if (childrenList.isEmpty) {
       return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'No children found',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // If we have children but no report, show dropdown and empty state
+    if (_report == null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 1,
+          leading: IconButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+            tooltip: 'Back to Children',
+          ),
+          title: const Text(
+            'Assessment Report',
+            style: TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.w600),
+          ),
+        ),
         body: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (childrenList.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
+            // Children Dropdown
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  const Text(
+                    'Select Child:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButton<String>(
+                      value: selectedChildId,
+                      isExpanded: true,
+                      hint: const Text('Choose a child'),
+                      items: childrenList.map((child) {
+                        return DropdownMenuItem<String>(
+                          value: child.id,
+                          child: Text(child.name),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          final child = childrenList.firstWhere((c) => c.id == value);
+                          setState(() {
+                            selectedChildId = value;
+                            selectedChildName = child.name;
+                          });
+                          _loadAssessmentReport(value);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Empty State
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
-                      'Select Child:',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    Icon(Icons.assignment_outlined, size: 64, color: Colors.grey.shade400),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No assessment report available',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: selectedChildId,
-                        isExpanded: true,
-                        hint: const Text('Choose a child'),
-                        items: childrenList.map((child) {
-                          return DropdownMenuItem<String>(
-                            value: child.id,
-                            child: Text(child.name),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            final child = childrenList.firstWhere((c) => c.id == value);
-                            setState(() {
-                              selectedChildId = value;
-                              selectedChildName = child.name;
-                            });
-                            _loadAssessmentReport(value);
-                          }
-                        },
+                    const SizedBox(height: 16),
+                    if (selectedChildId != null)
+                      ElevatedButton.icon(
+                        onPressed: () => _loadAssessmentReport(selectedChildId!),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D3748),
+                          foregroundColor: Colors.white,
+                        ),
                       ),
-                    ),
                   ],
                 ),
-              ),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.assignment_outlined, size: 64, color: Colors.grey.shade400),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No assessment report available',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                  if (selectedChildId != null)
-                    ElevatedButton.icon(
-                      onPressed: () => _loadAssessmentReport(selectedChildId!),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2D3748),
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                ],
               ),
             ),
           ],
@@ -164,6 +201,7 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
       );
     }
 
+    // We have a report - show it
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white,
