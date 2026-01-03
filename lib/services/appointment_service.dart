@@ -46,8 +46,11 @@ class AppointmentService {
         throw Exception('Unauthorized. Please login again.');
       }
 
+      final url = '${Config.apiBaseUrl}/appointment/all';
+      print('🔗 Fetching appointments from: $url');
+      
       final response = await http.get(
-        Uri.parse('${Config.apiBaseUrl}/appointment/all'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -57,25 +60,33 @@ class AppointmentService {
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
       );
 
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        print('✅ Decoded data: $data');
         final appointmentsData = data['appointments'] as List?;
 
         if (appointmentsData == null) {
+          print('⚠️ No appointments data in response');
           return [];
         }
 
+        print('📋 Found ${appointmentsData.length} appointments');
         return appointmentsData
             .map((apt) => Appointment.fromJson(apt as Map<String, dynamic>))
             .toList();
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized. Please login again.');
       } else {
-        throw Exception('Failed to fetch appointments');
+        throw Exception('Failed to fetch appointments: ${response.statusCode} - ${response.body}');
       }
-    } on SocketException {
+    } on SocketException catch (e) {
+      print('🌐 Network error: $e');
       throw Exception('No internet connection. Please check your network.');
     } catch (e) {
+      print('❌ Error fetching appointments: $e');
       rethrow;
     }
   }
