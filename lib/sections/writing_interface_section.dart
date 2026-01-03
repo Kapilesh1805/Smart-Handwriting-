@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../widgets/unified_writing_canvas.dart';
 import '../services/child_service.dart';
 import '../services/handwriting_service.dart';
@@ -263,16 +261,12 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
         return;
       }
 
-      print('📊 Canvas data - Strokes: ${strokesData.length}, Pressure points: ${pressureData.length}');
-
-      // Get canvas as image for analysis
-      final imageBase64 = canvasKey.currentState?.getCanvasAsBase64();
+      debugPrint('📊 Canvas data - Strokes: ${strokesData.length}, Pressure points: ${pressureData.length}');
 
       // Send to backend for ML analysis
       final analysis = await HandwritingService.analyzeHandwriting(
         childId: selectedChildId!,
         letter: currentCharacter,
-        imageBase64: imageBase64,
         strokesData: strokesData,
         pressureData: pressureData,
       );
@@ -293,7 +287,7 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
         showFeedback = true;
       });
 
-      print('✅ Analysis complete');
+      debugPrint('✅ Analysis complete');
     } catch (e) {
       setState(() {
         isProcessingML = false;
