@@ -153,8 +153,12 @@ class AppointmentService {
         throw Exception('All fields are required');
       }
 
+      final url = '${Config.apiBaseUrl}/appointment/add';
+      print('🔗 Adding appointment to: $url');
+      print('📝 Data: childName=$childName, therapistName=$therapistName, date=$date, time=$time');
+
       final response = await http.post(
-        Uri.parse('${Config.apiBaseUrl}/appointment/add'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -171,8 +175,12 @@ class AppointmentService {
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
       );
 
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+
       if (response.statusCode == 201) {
         final data = json.decode(response.body);
+        print('✅ Appointment created successfully');
         return Appointment.fromJson(data['data'] as Map<String, dynamic>);
       } else if (response.statusCode == 401) {
         throw Exception('Unauthorized. Please login again.');
@@ -180,11 +188,13 @@ class AppointmentService {
         final data = json.decode(response.body);
         throw Exception(data['error'] ?? 'Invalid request');
       } else {
-        throw Exception('Failed to add appointment');
+        throw Exception('Failed to add appointment: ${response.statusCode} - ${response.body}');
       }
-    } on SocketException {
-      throw Exception('No internet connection. Please check your network.');
+    } on SocketException catch (e) {
+      print('🌐 Socket error: $e');
+      throw Exception('Network error: Please check your internet connection.');
     } catch (e) {
+      print('❌ Error adding appointment: $e');
       rethrow;
     }
   }
@@ -208,8 +218,12 @@ class AppointmentService {
         throw Exception('Invalid status. Must be pending, completed, or missed');
       }
 
+      final url = '${Config.apiBaseUrl}/appointment/update_status';
+      print('🔗 Updating appointment status at: $url');
+      print('📝 Data: appointmentId=$appointmentId, status=$status');
+
       final response = await http.put(
-        Uri.parse('${Config.apiBaseUrl}/appointment/update_status'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -223,12 +237,19 @@ class AppointmentService {
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
       );
 
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+
       if (response.statusCode != 200) {
-        throw Exception('Failed to update appointment status');
+        throw Exception('Failed to update appointment status: ${response.statusCode} - ${response.body}');
       }
-    } on SocketException {
-      throw Exception('No internet connection. Please check your network.');
+      
+      print('✅ Appointment status updated successfully');
+    } on SocketException catch (e) {
+      print('🌐 Socket error: $e');
+      throw Exception('Network error: Please check your internet connection.');
     } catch (e) {
+      print('❌ Error updating appointment: $e');
       rethrow;
     }
   }
@@ -244,8 +265,11 @@ class AppointmentService {
         throw Exception('Appointment ID is required');
       }
 
+      final url = '${Config.apiBaseUrl}/appointment/delete/$appointmentId';
+      print('🔗 Deleting appointment at: $url');
+
       final response = await http.delete(
-        Uri.parse('${Config.apiBaseUrl}/appointment/delete/$appointmentId'),
+        Uri.parse(url),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -255,12 +279,19 @@ class AppointmentService {
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
       );
 
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+
       if (response.statusCode != 200) {
-        throw Exception('Failed to delete appointment');
+        throw Exception('Failed to delete appointment: ${response.statusCode} - ${response.body}');
       }
-    } on SocketException {
-      throw Exception('No internet connection. Please check your network.');
+      
+      print('✅ Appointment deleted successfully');
+    } on SocketException catch (e) {
+      print('🌐 Socket error: $e');
+      throw Exception('Network error: Please check your internet connection.');
     } catch (e) {
+      print('❌ Error deleting appointment: $e');
       rethrow;
     }
   }
