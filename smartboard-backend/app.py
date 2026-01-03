@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 from routes.sentence_routes import sentence_bp
 from routes.auth_routes import auth_bp
 from routes.child_routes import child_bp
@@ -16,6 +17,9 @@ import os
 
 def create_app():
     app = Flask(__name__)
+    
+    # Enable CORS for all routes
+    CORS(app, origins="*", supports_credentials=True)
 
     # register all blueprints
     app.register_blueprint(auth_bp)

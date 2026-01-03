@@ -43,11 +43,15 @@ def add_appointment():
 @appointment_bp.route("/all", methods=["GET"])
 def get_all_appointments():
     try:
+        print("🔍 Fetching all appointments...")
         appointments = list(appointments_col.find().sort("date", 1))
+        print(f"📋 Found {len(appointments)} appointments")
         for a in appointments:
             a["_id"] = str(a["_id"])
+        print(f"✅ Returning appointments: {appointments}")
         return jsonify({"msg": "success", "appointments": appointments}), 200
     except Exception as e:
+        print(f"❌ Error: {e}")
         return jsonify({"msg": "error", "error": str(e)}), 500
 
 
