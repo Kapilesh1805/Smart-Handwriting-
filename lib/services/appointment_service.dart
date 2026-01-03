@@ -42,19 +42,19 @@ class AppointmentService {
   static Future<List<Appointment>> getAllAppointments() async {
     try {
       final token = await Config.getAuthToken();
-      if (token == null) {
-        throw Exception('Unauthorized. Please login again.');
-      }
-
+      // Token is optional for appointment endpoint
+      
       final url = '${Config.apiBaseUrl}/appointment/all';
       print('🔗 Fetching appointments from: $url');
       
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
+      
       final response = await http.get(
         Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
       ).timeout(
         const Duration(seconds: 30),
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
@@ -94,16 +94,16 @@ class AppointmentService {
   static Future<List<Appointment>> getTodayAppointments() async {
     try {
       final token = await Config.getAuthToken();
-      if (token == null) {
-        throw Exception('Unauthorized. Please login again.');
-      }
+      // Token is optional for appointment endpoint
+      
+      final headers = {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
 
       final response = await http.get(
         Uri.parse('${Config.apiBaseUrl}/appointment/today'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
       ).timeout(
         const Duration(seconds: 30),
         onTimeout: () => throw Exception('Request timeout. Please try again.'),
