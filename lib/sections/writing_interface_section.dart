@@ -367,153 +367,154 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
         title: const Text('Writing Practice'),
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          // CHILD SELECTION DROPDOWN
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Text(
-                  'Select Child:',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: selectedChildId,
-                    isExpanded: true,
-                    hint: const Text('Choose a child'),
-                    items: childrenList.map((child) {
-                      return DropdownMenuItem<String>(
-                        value: child.id,
-                        child: Text(child.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        final child = childrenList.firstWhere((c) => c.id == value);
-                        setState(() {
-                          selectedChildId = value;
-                          selectedChildName = child.name;
-                        });
-                      }
-                    },
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // CHILD SELECTION DROPDOWN
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Text(
+                    'Select Child:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButton<String>(
+                      value: selectedChildId,
+                      isExpanded: true,
+                      hint: const Text('Choose a child'),
+                      items: childrenList.map((child) {
+                        return DropdownMenuItem<String>(
+                          value: child.id,
+                          child: Text(child.name),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          final child = childrenList.firstWhere((c) => c.id == value);
+                          setState(() {
+                            selectedChildId = value;
+                            selectedChildName = child.name;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // TOP: Letter/Number Selector
-          Container(
-            color: Colors.grey.shade100,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        showLetter ? currentCharacter : '?',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => setState(() => showLetter = !showLetter),
-                      icon: Icon(showLetter ? Icons.visibility : Icons.visibility_off),
-                      color: Colors.blue,
-                      iconSize: 24,
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => setState(() => isNumberMode = !isNumberMode),
-                      icon: const Icon(Icons.switch_access_shortcut),
-                      label: Text(isNumberMode ? 'Numbers' : 'Letters'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Character selector - hidden when eye is off, with arrow navigation
-                if (showLetter)
+            // TOP: Letter/Number Selector
+            Container(
+              color: Colors.grey.shade100,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Row(
                     children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          showLetter ? currentCharacter : '?',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
                       IconButton(
-                        onPressed: _previousCharacter,
-                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => setState(() => showLetter = !showLetter),
+                        icon: Icon(showLetter ? Icons.visibility : Icons.visibility_off),
                         color: Colors.blue,
                         iconSize: 24,
                       ),
-                      Expanded(
-                        child: SizedBox(
-                          height: 50,
-                          child: ListView.builder(
-                            controller: _characterScrollController,
-                            scrollDirection: Axis.horizontal,
-                            itemCount: currentList.length,
-                            itemBuilder: (ctx, idx) {
-                              final char = currentList[idx];
-                              final isSelected = char == currentCharacter;
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => setState(() => isNumberMode = !isNumberMode),
+                        icon: const Icon(Icons.switch_access_shortcut),
+                        label: Text(isNumberMode ? 'Numbers' : 'Letters'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Character selector - hidden when eye is off, with arrow navigation
+                  if (showLetter)
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _previousCharacter,
+                          icon: const Icon(Icons.arrow_back),
+                          color: Colors.blue,
+                          iconSize: 24,
+                        ),
+                        Expanded(
+                          child: SizedBox(
+                            height: 50,
+                            child: ListView.builder(
+                              controller: _characterScrollController,
+                              scrollDirection: Axis.horizontal,
+                              itemCount: currentList.length,
+                              itemBuilder: (ctx, idx) {
+                                final char = currentList[idx];
+                                final isSelected = char == currentCharacter;
 
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: GestureDetector(
-                                onTap: () => _selectCharacter(char),
-                                child: Container(
-                                  width: 40,
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? Colors.blue : Colors.white,
-                                    border: Border.all(
-                                      color: Colors.blue,
-                                      width: isSelected ? 2 : 1,
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: GestureDetector(
+                                  onTap: () => _selectCharacter(char),
+                                  child: Container(
+                                    width: 40,
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? Colors.blue : Colors.white,
+                                      border: Border.all(
+                                        color: Colors.blue,
+                                        width: isSelected ? 2 : 1,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      char,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: isSelected ? Colors.white : Colors.blue,
+                                    child: Center(
+                                      child: Text(
+                                        char,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: isSelected ? Colors.white : Colors.blue,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _nextCharacter,
-                        icon: const Icon(Icons.arrow_forward),
-                        color: Colors.blue,
-                        iconSize: 24,
-                      ),
-                    ],
-                  ),
-              ],
+                        IconButton(
+                          onPressed: _nextCharacter,
+                          icon: const Icon(Icons.arrow_forward),
+                          color: Colors.blue,
+                          iconSize: 24,
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
-          ),
-          // MIDDLE: Canvas (takes remaining space)
-          Expanded(
-            child: Container(
+            // MIDDLE: Canvas (fixed height so it doesn't expand)
+            Container(
               color: Colors.white,
               padding: const EdgeInsets.all(12),
+              height: 250,
               child: UnifiedWritingCanvas(
                 key: canvasKey,
                 onClear: () {},
@@ -523,41 +524,35 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
                 strokeWidth: strokeWidth,
               ),
             ),
-          ),
-          // BOTTOM: Action buttons
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
+            // BOTTOM: Action buttons
+            Container(
+              padding: const EdgeInsets.all(12),
               color: Colors.grey.shade100,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => canvasKey.currentState?.undoStroke(),
+                    icon: const Icon(Icons.undo),
+                    label: const Text('Undo'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => canvasKey.currentState?.clearCanvas(),
+                    icon: const Icon(Icons.clear),
+                    label: const Text('Clear'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: isProcessingML ? null : _checkWriting,
+                    icon: isProcessingML ? null : const Icon(Icons.check),
+                    label: Text(isProcessingML ? 'Analyzing...' : 'Check'),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed: () => canvasKey.currentState?.undoStroke(),
-                  icon: const Icon(Icons.undo),
-                  label: const Text('Undo'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => canvasKey.currentState?.clearCanvas(),
-                  icon: const Icon(Icons.clear),
-                  label: const Text('Clear'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: isProcessingML ? null : _checkWriting,
-                  icon: isProcessingML ? null : const Icon(Icons.check),
-                  label: Text(isProcessingML ? 'Analyzing...' : 'Check'),
-                ),
-              ],
-            ),
-          ),
-          // FEEDBACK SECTION: Scrollable feedback below buttons
-          if (showFeedback) _buildFeedback(),
-        ],
+            // FEEDBACK SECTION: Below buttons, scrollable with page
+            if (showFeedback) _buildFeedback(),
+          ],
+        ),
       ),
     );
   }
@@ -584,12 +579,11 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
     }
 
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: 200,
-      ),
+      margin: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: bgColor,
         border: Border(top: BorderSide(color: textColor, width: 2)),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         children: [
@@ -599,6 +593,10 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
             decoration: BoxDecoration(
               color: bgColor,
               border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -619,17 +617,15 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
               ],
             ),
           ),
-          // Scrollable feedback content
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                feedback,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.5,
-                  color: textColor,
-                ),
+          // Feedback content (not scrollable - page itself scrolls)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              feedback,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: textColor,
               ),
             ),
           ),
