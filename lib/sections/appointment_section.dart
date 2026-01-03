@@ -43,8 +43,15 @@ class _AppointmentSectionState extends State<AppointmentSection> {
     appointments.clear();
     final dayStr = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
     
+    print('📅 Loading appointments for day: $dayStr');
+    print('📋 Total appointments available: ${_allAppointments.length}');
+    
+    int matchedCount = 0;
     for (var apt in _allAppointments) {
+      print('  Checking: apt.date="${apt.date}" vs dayStr="$dayStr"');
       if (apt.date == dayStr) {
+        matchedCount++;
+        print('    ✅ MATCH FOUND: ${apt.childName} at ${apt.time}');
         final timeParts = apt.time.split(':');
         final hour = int.tryParse(timeParts[0]) ?? 0;
         
@@ -57,6 +64,8 @@ class _AppointmentSectionState extends State<AppointmentSection> {
         appointments[hour] = SlotData(apt.childName, statusColor);
       }
     }
+    
+    print('📊 Total matched appointments for $dayStr: $matchedCount');
   }
 
   String _formatHour12(int hour24) {
