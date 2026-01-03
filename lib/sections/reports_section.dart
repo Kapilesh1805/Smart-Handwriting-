@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/report_model.dart';
-import '../models/app_models.dart';
 import '../utils/report_service.dart';
 import '../services/child_service.dart';
 import '../config/api_config.dart';
@@ -35,7 +34,7 @@ class _ReportsSectionState extends State<ReportsSection> {
       setState(() {
         childrenList = children;
         if (children.isNotEmpty) {
-          selectedChildId = children.first.id;
+          selectedChildId = children.first.childId;
           _loadReport();
         }
       });
@@ -98,7 +97,7 @@ class _ReportsSectionState extends State<ReportsSection> {
                       items: childrenList.map((child) {
                         return DropdownMenuItem<String>(
                           value: child.childId,
-                          child: Text(child.childName),
+                          child: Text(child.name),
                         );
                       }).toList(),
                       onChanged: (value) {

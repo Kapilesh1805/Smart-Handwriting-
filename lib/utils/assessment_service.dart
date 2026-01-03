@@ -1,37 +1,109 @@
 import 'dart:convert';
-// import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import '../models/assessment_report.dart';
 
 class AssessmentService {
-  // TODO: API INTEGRATION - Update these when backend is ready
-  // static const String baseUrl = 'YOUR_BACKEND_URL/api';
-  // static const String apiKey = 'YOUR_API_KEY';
+  static const String _baseUrl = 'http://localhost:5000';
 
-  // Fetch latest assessment report for a child
+  // Fetch latest assessment report for a child from backend
   static Future<AssessmentReport?> fetchAssessmentReport(String childId) async {
     try {
-      // TODO: API INTEGRATION - Uncomment when backend is ready
-      /*
+      debugPrint('📊 Fetching assessment report for child: $childId');
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/assessments/$childId/latest'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-      );
+        Uri.parse('$_baseUrl/report/child/$childId'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return AssessmentReport.fromJson(data);
-      }
-      return null;
-      */
+        final jsonData = jsonDecode(response.body);
+        final reports = jsonData['data'] as List<dynamic>? ?? [];
 
-      // REMOVE THIS BLOCK AFTER API INTEGRATION - Mock data for testing
-      await Future.delayed(const Duration(milliseconds: 800));
-      return _getMockAssessmentReport(childId);
+        if (reports.isEmpty) {
+          debugPrint('⚠️ No reports found for child - returning null');
+          return null;
+        }
+
+        // Get latest report
+        final latestReport = reports.last as Map<String, dynamic>;
+        final summary = latestReport['summary'] as Map<String, dynamic>? ?? {};
+
+        debugPrint('✅ Report loaded with ${reports.length} sessions');
+
+        // Convert backend data to AssessmentReport format
+        return AssessmentReport(
+          childId: childId,
+          childName: 'Student', // TODO: Fetch from child profile
+          childAvatar: 'assets/avatars/student.png',
+          age: 8,
+          grade: 'Grade 2',
+          date: DateTime.now().toString().split(' ')[0],
+          componentScores: [
+            ComponentScore(
+              component: 'Pressure Control',
+              score: (summary['pressure_score'] as num?)?.toInt() ?? 0,
+              maxScore: 100,
+              observation: 'Pressure consistency analysis',
+            ),
+            ComponentScore(
+              component: 'Spacing & Alignment',
+              score: (summary['spacing_score'] as num?)?.toInt() ?? 0,
+              maxScore: 100,
+              observation: 'Letter spacing and alignment quality',
+            ),
+            ComponentScore(
+              component: 'Letter Formation',
+              score: (summary['formation_score'] as num?)?.toInt() ?? 0,
+              maxScore: 100,
+              observation: 'Accuracy of letter formation',
+            ),
+            ComponentScore(
+              component: 'Overall Accuracy',
+              score: (summary['accuracy_score'] as num?)?.toInt() ?? 0,
+              maxScore: 100,
+              observation: 'Combined accuracy metric',
+            ),
+          ],
+          visualAnalytics: VisualAnalytics(
+            baselineTracking: {
+              'Session 1': (summary['pressure_score'] as num?)?.toInt() ?? 0,
+              'Session 2': (summary['spacing_score'] as num?)?.toInt() ?? 0,
+              'Session 3': (summary['formation_score'] as num?)?.toInt() ?? 0,
+            },
+            progressChart: {
+              'Pressure': (summary['pressure_score'] as num?)?.toDouble() ?? 0,
+              'Spacing': (summary['spacing_score'] as num?)?.toDouble() ?? 0,
+              'Formation': (summary['formation_score'] as num?)?.toDouble() ?? 0,
+              'Accuracy': (summary['accuracy_score'] as num?)?.toDouble() ?? 0,
+            },
+          ),
+          recommendations: TherapistRecommendations(
+            improvements: [
+              summary['feedback'] ?? 'Continue with handwriting practice',
+            ],
+            areasToFocus: [
+              'Work on pressure consistency',
+              'Improve letter spacing',
+              'Focus on letter formation accuracy',
+            ],
+          ),
+          nextSessionGoal: 'Improve weak areas with targeted practice',
+          overallGrade: _getGrade((summary['overall_score'] as num?)?.toDouble() ?? 0),
+          gradePercentage: (summary['overall_score'] as num?)?.toDouble() ?? 0,
+        );
+      } else if (response.statusCode == 404) {
+        debugPrint('⚠️ No reports found (404)');
+        return null;
+      } else {
+        debugPrint('❌ Error fetching report: ${response.statusCode}');
+        return null;
+      }
+    } on http.ClientException catch (e) {
+      debugPrint('🔗 Network error: $e');
+      return null;
     } catch (e) {
-      print('Error fetching assessment report: $e');
+      debugPrint('❌ Error fetching assessment report: $e');
       return null;
     }
   }
@@ -39,113 +111,74 @@ class AssessmentService {
   // Fetch all assessment history for a child
   static Future<List<AssessmentReport>> fetchAssessmentHistory(String childId) async {
     try {
-      // TODO: API INTEGRATION - Uncomment when backend is ready
-      /*
+      debugPrint('📊 Fetching assessment history for child: $childId');
+      
       final response = await http.get(
-        Uri.parse('$baseUrl/assessments/$childId/history'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $apiKey',
-        },
-      );
+        Uri.parse('$_baseUrl/report/child/$childId'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => AssessmentReport.fromJson(json)).toList();
-      }
-      return [];
-      */
+        final jsonData = jsonDecode(response.body);
+        final reports = jsonData['data'] as List<dynamic>? ?? [];
 
-      // REMOVE THIS BLOCK AFTER API INTEGRATION
-      await Future.delayed(const Duration(milliseconds: 500));
-      return [_getMockAssessmentReport(childId)];
+        debugPrint('✅ Loaded ${reports.length} reports from history');
+
+        return reports.map((report) {
+          final summary = report['summary'] as Map<String, dynamic>? ?? {};
+          return AssessmentReport(
+            childId: childId,
+            childName: 'Student',
+            childAvatar: 'assets/avatars/student.png',
+            age: 8,
+            grade: 'Grade 2',
+            date: report['generated_at']?.toString().split(' ')[0] ?? DateTime.now().toString().split(' ')[0],
+            componentScores: [
+              ComponentScore(
+                component: 'Pressure Control',
+                score: (summary['pressure_score'] as num?)?.toInt() ?? 0,
+                maxScore: 100,
+                observation: 'Pressure consistency',
+              ),
+              ComponentScore(
+                component: 'Spacing & Alignment',
+                score: (summary['spacing_score'] as num?)?.toInt() ?? 0,
+                maxScore: 100,
+                observation: 'Letter spacing quality',
+              ),
+              ComponentScore(
+                component: 'Letter Formation',
+                score: (summary['formation_score'] as num?)?.toInt() ?? 0,
+                maxScore: 100,
+                observation: 'Formation accuracy',
+              ),
+            ],
+            visualAnalytics: VisualAnalytics(baselineTracking: {}, progressChart: {}),
+            recommendations: TherapistRecommendations(
+              improvements: [summary['feedback'] ?? 'Good progress'],
+              areasToFocus: [],
+            ),
+            nextSessionGoal: 'Continue practice',
+            overallGrade: _getGrade((summary['overall_score'] as num?)?.toDouble() ?? 0),
+            gradePercentage: (summary['overall_score'] as num?)?.toDouble() ?? 0,
+          );
+        }).toList();
+      } else {
+        debugPrint('⚠️ No history found');
+        return [];
+      }
     } catch (e) {
-      print('Error fetching assessment history: $e');
+      debugPrint('❌ Error fetching history: $e');
       return [];
     }
   }
 
-  // REMOVE THIS METHOD AFTER API INTEGRATION - Mock data generator
-  static AssessmentReport _getMockAssessmentReport(String childId) {
-    return AssessmentReport(
-      childId: childId,
-      childName: 'Emily',
-      childAvatar: 'assets/avatars/girl.png',
-      age: 7,
-      grade: 'Three',
-      date: 'Nov 16, 2024',
-      componentScores: [
-        ComponentScore(
-          component: 'Shape Formation',
-          score: 3,
-          maxScore: 5,
-          observation: 'Letter shapes mostly correct',
-        ),
-        ComponentScore(
-          component: 'Letter Formation',
-          score: 3,
-          maxScore: 5,
-          observation: 'Consistent letter structure',
-        ),
-        ComponentScore(
-          component: 'Size/Font Control',
-          score: 2,
-          maxScore: 5,
-          observation: 'Needs uniform size practice',
-        ),
-        ComponentScore(
-          component: 'Sentence Writing',
-          score: 3,
-          maxScore: 5,
-          observation: 'Some control of signs & spaces',
-        ),
-        ComponentScore(
-          component: 'Spacing',
-          score: 2,
-          maxScore: 5,
-          observation: 'Needs spacing practice',
-        ),
-        ComponentScore(
-          component: 'Tool Consistency',
-          score: 3,
-          maxScore: 5,
-          observation: 'Median marks visible',
-        ),
-        ComponentScore(
-          component: 'Legibility',
-          score: 13,
-          maxScore: 18,
-          observation: '',
-        ),
-      ],
-      visualAnalytics: VisualAnalytics(
-        baselineTracking: {
-          'Week 1': 12,
-          'Week 2': 15,
-          'Week 3': 18,
-          'Week 4': 20,
-        },
-        progressChart: {
-          'Session 1': 45.0,
-          'Session 2': 52.0,
-          'Session 3': 58.0,
-          'Session 4': 65.0,
-        },
-      ),
-      recommendations: TherapistRecommendations(
-        improvements: [
-          'Letter spacing has improved significantly',
-          'Tool grip has shown consistent progress',
-          'Focus on writing within (short sentences)',
-        ],
-        areasToFocus: [
-          'Use varied grips to regulate pencil pressure',
-          'Work on consistent letter size',
-        ],
-      ),
-      nextSessionGoal: 'Improve number formation accuracy',
-      overallGrade: 'B',
-      gradePercentage: 72.2,
-    );
+  // Helper method to convert percentage to grade
+  static String _getGrade(double percentage) {
+    if (percentage >= 90) return 'A';
+    if (percentage >= 80) return 'B';
+    if (percentage >= 70) return 'C';
+    if (percentage >= 60) return 'D';
+    return 'F';
   }
 }
