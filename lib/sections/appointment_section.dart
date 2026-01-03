@@ -387,10 +387,10 @@ class _AppointmentSectionState extends State<AppointmentSection> {
     final formKey = GlobalKey<FormState>();
     final nameCtrl = TextEditingController(text: slot.label);
     String selectedStatus = slot.color == const Color(0xFF22C55E)
-        ? 'Completed'
+        ? 'completed'
         : slot.color == const Color(0xFFF59E0B)
-        ? 'Pending'
-        : 'Missed';
+        ? 'pending'
+        : 'missed';
 
     showDialog(
       context: context,
@@ -414,11 +414,11 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(
-                      value: 'Completed',
+                      value: 'completed',
                       child: Text('Completed'),
                     ),
-                    DropdownMenuItem(value: 'Pending', child: Text('Pending')),
-                    DropdownMenuItem(value: 'Missed', child: Text('Missed')),
+                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                    DropdownMenuItem(value: 'missed', child: Text('Missed')),
                   ],
                   onChanged: (val) {
                     if (val != null) {
@@ -435,37 +435,91 @@ class _AppointmentSectionState extends State<AppointmentSection> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(ctx).pop();
                 if (mounted) {
                   setState(() {
                     appointments.remove(hour);
                   });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Appointment deleted')),
+                  // Find the appointment ID to delete
+                  final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
+                  final aptToDelete = _allAppointments.firstWhere(
+                    (apt) => apt.date == dayStr && apt.childName == slot.label,
+                    orElse: () => Appointment(
+                      id: '',
+                      childName: '',
+                      therapistName: '',
+                      sessionType: '',
+                      date: '',
+                      time: '',
+                      status: 'pending',
+                    ),
                   );
+                  
+                  if (aptToDelete.id.isNotEmpty) {
+                    try {
+                      await AppointmentService.deleteAppointment(aptToDelete.id);
+                      await _fetchAppointments();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Appointment deleted')),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
+                        );
+                      }
+                    }
+                  }
                 }
               },
               child: const Text('Delete', style: TextStyle(color: Colors.red)),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 if (formKey.currentState!.validate()) {
-                  final name = nameCtrl.text;
                   Navigator.of(ctx).pop();
-                  final Color statusColor = selectedStatus == 'Completed'
-                      ? const Color(0xFF22C55E)
-                      : selectedStatus == 'Pending'
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFFEF4444);
-
-                  if (mounted) {
-                    setState(() {
-                      appointments[hour] = SlotData(name, statusColor);
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Appointment updated')),
-                    );
+                  
+                  // Find the appointment to update
+                  final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
+                  final aptToUpdate = _allAppointments.firstWhere(
+                    (apt) => apt.date == dayStr && apt.childName == slot.label,
+                    orElse: () => Appointment(
+                      id: '',
+                      childName: '',
+                      therapistName: '',
+                      sessionType: '',
+                      date: '',
+                      time: '',
+                      status: 'pending',
+                    ),
+                  );
+                  
+                  if (aptToUpdate.id.isNotEmpty) {
+                    try {
+                      print('🔄 Updating appointment ${aptToUpdate.id} status to $selectedStatus');
+                      await AppointmentService.updateAppointmentStatus(
+                        appointmentId: aptToUpdate.id,
+                        status: selectedStatus,
+                      );
+                      
+                      // Refresh appointments to get the latest data from backend
+                      await _fetchAppointments();
+                      
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Appointment updated')),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
+                        );
+                      }
+                    }
                   }
                 }
               },
