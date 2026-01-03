@@ -28,6 +28,7 @@ class AssessmentService {
         // Get latest report
         final latestReport = reports.last as Map<String, dynamic>;
         final summary = latestReport['summary'] as Map<String, dynamic>? ?? {};
+        final generatedAt = latestReport['generated_at']?.toString() ?? DateTime.now().toString();
 
         debugPrint('✅ Report loaded with ${reports.length} sessions');
 
@@ -38,7 +39,7 @@ class AssessmentService {
           childAvatar: 'assets/avatars/student.png',
           age: age ?? 8,
           grade: grade ?? 'Grade 2',
-          date: DateTime.now().toString().split(' ')[0],
+          date: generatedAt.split('T')[0], // Extract date from ISO format
           componentScores: [
             ComponentScore(
               component: 'Pressure Control',
@@ -132,7 +133,7 @@ class AssessmentService {
             childAvatar: 'assets/avatars/student.png',
             age: age ?? 8,
             grade: grade ?? 'Grade 2',
-            date: report['generated_at']?.toString().split(' ')[0] ?? DateTime.now().toString().split(' ')[0],
+            date: report['generated_at']?.toString().split('T')[0] ?? DateTime.now().toString().split('T')[0],
             componentScores: [
               ComponentScore(
                 component: 'Pressure Control',
