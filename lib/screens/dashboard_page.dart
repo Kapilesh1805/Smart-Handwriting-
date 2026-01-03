@@ -8,6 +8,7 @@ import '../sections/appointment_section.dart';
 import '../sections/writing_interface_section.dart';
 import '../sections/childrens_main.dart';
 import '../sections/assessment_report_section.dart';
+import '../sections/reports_section.dart';
 import '../sections/pre_writing_section.dart';
 import '../sections/settings_section.dart';
 import '../sections/sentence_section.dart';
@@ -184,25 +185,27 @@ class _DashboardPageState extends State<DashboardPage> {
                                 ? const AppointmentSection()
                                 : _selectedSection == 'Writing Interface'
                                     ? const WritingInterfaceSection()
-                                    : _selectedSection == 'Report'
-                                        ? const AssessmentReportSection(
-                                            childId: 'child_123',
-                                          )
-                                        : _selectedSection == 'Childrens'
-                                            ? ChildrensMain(
-                                                children: _children,
-                                                onRefresh: _refreshChildren,
+                                    : _selectedSection == 'Reports'
+                                        ? const ReportsSection()
+                                        : _selectedSection == 'Report'
+                                            ? const AssessmentReportSection(
+                                                childId: 'child_123',
                                               )
-                                            : _selectedSection == 'Pre writing'
-                                                ? const PreWritingSection()
-                                                : _selectedSection == 'Sentence Writing'
-                                                    ? const SentenceSection()
-                                                    : _selectedSection == 'Settings'
-                                                        ? const SettingsSection()
-                                                        : DashboardSection(
-                                                            children: _children,
-                                                            onRefresh: _refreshChildren,
-                                                          ),
+                                            : _selectedSection == 'Childrens'
+                                                ? ChildrensMain(
+                                                    children: _children,
+                                                    onRefresh: _refreshChildren,
+                                                  )
+                                                : _selectedSection == 'Pre writing'
+                                                    ? const PreWritingSection()
+                                                    : _selectedSection == 'Sentence Writing'
+                                                        ? const SentenceSection()
+                                                        : _selectedSection == 'Settings'
+                                                            ? const SettingsSection()
+                                                            : DashboardSection(
+                                                                children: _children,
+                                                                onRefresh: _refreshChildren,
+                                                              ),
                           ),
                           const SizedBox(width: 24.0),
                           Expanded(

@@ -24,6 +24,7 @@ class Sidebar extends StatelessWidget {
       const MapEntry(Icons.event_outlined, 'Appointment'),
       const MapEntry(Icons.draw_outlined, 'Writing Interface'),
       const MapEntry(Icons.child_care_outlined, 'Childrens'),
+      const MapEntry(Icons.assessment_outlined, 'Reports'),
       const MapEntry(Icons.insert_chart_outlined, 'Report'),
       const MapEntry(Icons.border_color_outlined, 'Pre writing'),
       const MapEntry(Icons.description_outlined, 'Sentence Writing'),

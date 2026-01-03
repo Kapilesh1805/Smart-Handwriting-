@@ -12,6 +12,7 @@ dependencies:
   provider: ^6.1.1
   shared_preferences: ^2.2.2
   http: ^1.1.0
+  fl_chart: ^0.65.0
 
 
   cupertino_icons: ^1.0.8
