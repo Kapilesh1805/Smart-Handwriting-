@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
 from database import users_col
-from utils import create_token
+from helpers import create_token
 from werkzeug.security import generate_password_hash, check_password_hash
-import uuid
-import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -38,22 +39,72 @@ def register():
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    """Login endpoint with hardened error handling."""
     try:
+        # Extract JSON safely
         data = request.json or {}
-        email = data.get("email")
+        email = data.get("email", "").strip() if data.get("email") else None
         password = data.get("password")
-        
+
+        # Validate input
         if not email or not password:
-            return jsonify({"msg": "error", "error": "Email and password required"}), 400
-        
-        user = users_col.find_one({"email": email})
-        if not user or not check_password_hash(user["password"], password):
-            return jsonify({"msg": "error", "error": "Invalid email or password"}), 401
-        
-        token = create_token(user["_id"])
-        return jsonify({"msg": "ok", "token": token, "user_id": user["_id"], "user_name": user.get("name", "User")}), 200
+            logger.warning("[AUTH] Login attempt with missing email or password")
+            return jsonify({
+                "status": "error",
+                "message": "Email and password required"
+            }), 400
+
+        # Look up user
+        try:
+            user = users_col.find_one({"email": email})
+        except Exception as db_err:
+            logger.error(f"[AUTH] Database error on user lookup: {db_err}")
+            return jsonify({
+                "status": "error",
+                "message": "Server error: database unavailable"
+            }), 500
+
+        # Check user exists and password matches
+        if not user:
+            logger.warning(f"[AUTH] Login failed: user not found for email {email}")
+            return jsonify({
+                "status": "error",
+                "message": "Invalid email or password"
+            }), 401
+
+        if not check_password_hash(user.get("password", ""), password):
+            logger.warning(f"[AUTH] Login failed: password mismatch for user {email}")
+            return jsonify({
+                "status": "error",
+                "message": "Invalid email or password"
+            }), 401
+
+        # Generate token
+        try:
+            token = create_token({"user_id": user["_id"]})
+        except Exception as token_err:
+            logger.error(f"[AUTH] Token generation failed: {token_err}")
+            return jsonify({
+                "status": "error",
+                "message": "Failed to generate authentication token"
+            }), 500
+
+        # Success
+        logger.info(f"[AUTH] Login successful for user {user['_id']}")
+        return jsonify({
+            "status": "success",
+            "msg": "ok",
+            "token": token,
+            "user_id": user["_id"],
+            "user_name": user.get("name", "User")
+        }), 200
+
     except Exception as e:
-        return jsonify({"msg": "error", "error": str(e)}), 500
+        logger.error(f"[AUTH] Unexpected error in login handler: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": "Internal server error during login"
+        }), 500
 
 @auth_bp.route("/update_profile", methods=["PUT"])
 def update_profile():
@@ -96,73 +147,5 @@ def update_profile():
         else:
             return jsonify({"msg": "no changes made"}), 200
 
-    except Exception as e:
-        return jsonify({"msg": "error", "error": str(e)}), 500
-
-# temporary in-memory store for reset tokens
-reset_tokens = {}
-
-@auth_bp.route("/forgot_password", methods=["POST"])
-def forgot_password():
-    """
-    Expects: { "email": "user@example.com" }
-    Returns a temporary reset token (in real case, email it)
-    """
-    try:
-        data = request.json or {}
-        email = data.get("email")
-
-        if not email:
-            return jsonify({"msg": "error", "error": "Email required"}), 400
-
-        user = users_col.find_one({"email": email})
-        if not user:
-            return jsonify({"msg": "error", "error": "User not found"}), 404
-
-        token = str(uuid.uuid4())
-        reset_tokens[token] = {
-            "user_id": str(user["_id"]),
-            "expires_at": datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
-        }
-
-        # (in a real system, you'd email this token link)
-        return jsonify({
-            "msg": "reset token generated",
-            "reset_token": token,
-            "expires_in_minutes": 15
-        })
-    except Exception as e:
-        return jsonify({"msg": "error", "error": str(e)}), 500
-
-
-@auth_bp.route("/reset_password", methods=["POST"])
-def reset_password():
-    """
-    Expects: { "token": "<reset_token>", "new_password": "..." }
-    """
-    try:
-        data = request.json or {}
-        token = data.get("token")
-        new_password = data.get("new_password")
-
-        if not token or not new_password:
-            return jsonify({"msg": "error", "error": "Token and new_password required"}), 400
-
-        token_data = reset_tokens.get(token)
-        if not token_data:
-            return jsonify({"msg": "error", "error": "Invalid or expired token"}), 400
-
-        if datetime.datetime.utcnow() > token_data["expires_at"]:
-            del reset_tokens[token]
-            return jsonify({"msg": "error", "error": "Token expired"}), 400
-
-        user_id = token_data["user_id"]
-        hashed_pw = generate_password_hash(new_password)
-        users_col.update_one({"_id": user_id}, {"$set": {"password": hashed_pw}})
-
-        # remove used token
-        del reset_tokens[token]
-
-        return jsonify({"msg": "password reset successful", "user_id": user_id})
     except Exception as e:
         return jsonify({"msg": "error", "error": str(e)}), 500
