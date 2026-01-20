@@ -179,6 +179,7 @@ def analyze_sentence():
         image_b64 = data.get("image_b64")
         meta = data.get("meta", {})
         sentence = meta.get("sentence", "").strip()
+        displayed_pressure = meta.get("displayed_pressure")
 
         # Validate inputs
         if not child_id:
@@ -216,7 +217,7 @@ def analyze_sentence():
             is_correct=is_correct,
             confidence=max_similarity,
             formation_score=None,
-            pressure_score=None,
+            pressure_score=pressure if is_correct else None,
             analysis_source="SENTENCE_TEMPLATE_CLIP_SIMILARITY",
             evaluation_mode="sentence",
             debug_info={
@@ -229,13 +230,17 @@ def analyze_sentence():
 
         # STRICT RESPONSE FORMAT
         if is_correct:
-            # Decode image for pressure calculation
-            image_data = image_b64.split(",")[1] if "," in image_b64 else image_b64
-            user_bytes = base64.b64decode(image_data)
-            user_array = np.frombuffer(user_bytes, dtype=np.uint8)
-            user_image = cv2.imdecode(user_array, cv2.IMREAD_COLOR)
-            
-            pressure = _compute_pressure_metric(user_image) if user_image is not None else 50
+            # Use displayed pressure if provided, otherwise compute from image
+            if displayed_pressure is not None:
+                pressure = displayed_pressure
+            else:
+                # Decode image for pressure calculation
+                image_data = image_b64.split(",")[1] if "," in image_b64 else image_b64
+                user_bytes = base64.b64decode(image_data)
+                user_array = np.frombuffer(user_bytes, dtype=np.uint8)
+                user_image = cv2.imdecode(user_array, cv2.IMREAD_COLOR)
+                
+                pressure = _compute_pressure_metric(user_image) if user_image is not None else 50
             accuracy = round(max_similarity * 100, 1)
             
             return jsonify({
