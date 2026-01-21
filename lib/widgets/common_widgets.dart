@@ -134,7 +134,7 @@ class ScheduleCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE3E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -146,7 +146,7 @@ class ScheduleCard extends StatelessWidget {
           Text(
             year,
             style: TextStyle(
-              color: fg.withOpacity(0.7),
+              color: fg.withValues(alpha: 0.7),
               fontSize: 12.0,
               fontWeight: FontWeight.w600,
             ),
@@ -154,7 +154,7 @@ class ScheduleCard extends StatelessWidget {
           Text(
             month,
             style: TextStyle(
-              color: fg.withOpacity(0.7),
+              color: fg.withValues(alpha: 0.7),
               fontSize: 12.0,
               fontWeight: FontWeight.w600,
             ),
@@ -166,7 +166,7 @@ class ScheduleCard extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: dark
-                  ? Colors.white.withOpacity(0.1)
+                  ? Colors.white.withValues(alpha: 0.1)
                   : const Color(0xFFF6F8FC),
               borderRadius: BorderRadius.circular(12.0),
               border: Border.all(color: const Color(0xFFE3E8F0)),

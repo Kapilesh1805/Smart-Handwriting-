@@ -27,44 +27,7 @@ class AssessmentReport {
     required this.gradePercentage,
   });
 
-  // TODO: API INTEGRATION - Uncomment when backend is ready
-  /*
-  factory AssessmentReport.fromJson(Map<String, dynamic> json) {
-    return AssessmentReport(
-      childId: json['child_id'],
-      childName: json['child_name'],
-      childAvatar: json['child_avatar'],
-      age: json['age'],
-      grade: json['grade'],
-      date: json['date'],
-      componentScores: (json['component_scores'] as List)
-          .map((e) => ComponentScore.fromJson(e))
-          .toList(),
-      visualAnalytics: VisualAnalytics.fromJson(json['visual_analytics']),
-      recommendations: TherapistRecommendations.fromJson(json['recommendations']),
-      nextSessionGoal: json['next_session_goal'],
-      overallGrade: json['overall_grade'],
-      gradePercentage: json['grade_percentage'].toDouble(),
-    );
-  }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'child_id': childId,
-      'child_name': childName,
-      'child_avatar': childAvatar,
-      'age': age,
-      'grade': grade,
-      'date': date,
-      'component_scores': componentScores.map((e) => e.toJson()).toList(),
-      'visual_analytics': visualAnalytics.toJson(),
-      'recommendations': recommendations.toJson(),
-      'next_session_goal': nextSessionGoal,
-      'overall_grade': overallGrade,
-      'grade_percentage': gradePercentage,
-    };
-  }
-  */
 }
 
 class ComponentScore {
@@ -80,26 +43,7 @@ class ComponentScore {
     required this.observation,
   });
 
-  // TODO: API INTEGRATION
-  /*
-  factory ComponentScore.fromJson(Map<String, dynamic> json) {
-    return ComponentScore(
-      component: json['component'],
-      score: json['score'],
-      maxScore: json['max_score'],
-      observation: json['observation'],
-    );
-  }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'component': component,
-      'score': score,
-      'max_score': maxScore,
-      'observation': observation,
-    };
-  }
-  */
 }
 
 class VisualAnalytics {
@@ -111,22 +55,6 @@ class VisualAnalytics {
     required this.progressChart,
   });
 
-  // TODO: API INTEGRATION
-  /*
-  factory VisualAnalytics.fromJson(Map<String, dynamic> json) {
-    return VisualAnalytics(
-      baselineTracking: Map<String, int>.from(json['baseline_tracking']),
-      progressChart: Map<String, double>.from(json['progress_chart']),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'baseline_tracking': baselineTracking,
-      'progress_chart': progressChart,
-    };
-  }
-  */
 }
 
 class TherapistRecommendations {
@@ -137,21 +65,4 @@ class TherapistRecommendations {
     required this.improvements,
     required this.areasToFocus,
   });
-
-  // TODO: API INTEGRATION
-  /*
-  factory TherapistRecommendations.fromJson(Map<String, dynamic> json) {
-    return TherapistRecommendations(
-      improvements: List<String>.from(json['improvements']),
-      areasToFocus: List<String>.from(json['areas_to_focus']),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'improvements': improvements,
-      'areas_to_focus': areasToFocus,
-    };
-  }
-  */
 }

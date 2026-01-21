@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/child_profile.dart';
 import '../widgets/child_card.dart';
 import '../services/child_service.dart' as new_service;
-import '../utils/child_service.dart' as old_service;
 import '../config/api_config.dart';
 import '../sections/writing_interface_section.dart';
-import '../sections/assessment_report_section.dart';
+import '../sections/reports_section.dart';
 import '../sections/pre_writing_section.dart';
 import '../sections/sentence_section.dart';
 
@@ -170,7 +169,7 @@ class _ChildrensMainState extends State<ChildrensMain> {
                           if (mounted) {
                             Navigator.of(ctx).pop();
                             _fetchChildren();
-                            ScaffoldMessenger.of(context).showSnackBar(
+                              ScaffoldMessenger.of(ctx).showSnackBar(
                               SnackBar(
                                 content: Text('${nameCtrl.text} added successfully'),
                                 backgroundColor: Colors.green,
@@ -228,7 +227,7 @@ class _ChildrensMainState extends State<ChildrensMain> {
                 if (mounted) {
                   Navigator.of(ctx).pop();
                   _fetchChildren();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(ctx).showSnackBar(
                     SnackBar(
                       content: Text('$childName removed'),
                       backgroundColor: Colors.green,
@@ -238,7 +237,7 @@ class _ChildrensMainState extends State<ChildrensMain> {
               } catch (e) {
                 if (mounted) {
                   Navigator.of(ctx).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(ctx).showSnackBar(
                     SnackBar(
                       content: Text('Error: $e'),
                       backgroundColor: Colors.red,
@@ -342,13 +341,13 @@ class _ChildrensMainState extends State<ChildrensMain> {
                 child: child,
                 onDelete: () => _deleteChild(child.id, child.name),
                 
-                // Navigate to Assessment Report Section for this child
+                // Navigate to Reports Section for this child
                 onViewReport: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => AssessmentReportSection(
-                        childId: child.id,
+                      builder: (context) => ReportsSection(
+                        childIdContext: child.id,
                       ),
                     ),
                   );

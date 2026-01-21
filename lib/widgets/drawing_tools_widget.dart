@@ -11,7 +11,7 @@ class DrawingToolsWidget extends StatelessWidget {
   final VoidCallback onSave;
 
   const DrawingToolsWidget({
-    Key? key,
+    super.key,
     required this.selectedTool,
     required this.selectedColor,
     required this.strokeWidth,
@@ -20,7 +20,7 @@ class DrawingToolsWidget extends StatelessWidget {
     required this.onStrokeWidthChanged,
     required this.onClear,
     required this.onSave,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

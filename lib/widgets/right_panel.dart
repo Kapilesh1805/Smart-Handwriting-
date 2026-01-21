@@ -104,31 +104,6 @@ class _RightPanelState extends State<RightPanel> {
         Card(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Appointment',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12.0),
-              if (widget.appointments.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(12.0),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7FAFF),
-                    borderRadius: BorderRadius.circular(12.0),
-                    border: Border.all(color: const Color(0xFFE3E8F0)),
-                  ),
-                  child: const Text('No appointments'),
-                )
-              else
-                ...widget.appointments.map((a) => AppointmentTile(item: a)).toList(),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16.0),
-        Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: const [
               Text('Message', style: TextStyle(fontWeight: FontWeight.bold)),
               SizedBox(height: 12.0),

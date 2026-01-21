@@ -17,7 +17,6 @@ class _LoginFormState extends State<LoginForm> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  bool _rememberMe = false;
   String? _errorMessage;
 
   @override
@@ -54,136 +53,6 @@ class _LoginFormState extends State<LoginForm> {
         }
       }
     }
-  }
-
-  void _showForgotPasswordDialog() {
-    final formKey = GlobalKey<FormState>();
-    final emailController = TextEditingController();
-    bool isSubmitting = false;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-              title: const Text(
-                'Reset Password',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      controller: emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Email address',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16.0,
-                          vertical: 16.0,
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your email';
-                        }
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                            .hasMatch(value)) {
-                          return 'Please enter a valid email';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () {
-                          Navigator.of(dialogContext).pop();
-                        },
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
-                          if (formKey.currentState!.validate()) {
-                            setState(() {
-                              isSubmitting = true;
-                            });
-
-                            try {
-                              await AuthService.forgotPassword(
-                                email: emailController.text.trim(),
-                              );
-
-                              if (mounted) {
-                                Navigator.of(dialogContext).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Password reset link sent to your email',
-                                    ),
-                                    backgroundColor: Colors.green,
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      e.toString().replaceFirst('Exception: ', ''),
-                                    ),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
-                              }
-                              setState(() {
-                                isSubmitting = false;
-                              });
-                            }
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2D3748),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: isSubmitting
-                      ? const SizedBox(
-                          height: 18.0,
-                          width: 18.0,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.0,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text('Send Link'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    ).then((_) {
-      emailController.dispose();
-    });
   }
 
   @override
@@ -257,59 +126,6 @@ class _LoginFormState extends State<LoginForm> {
               }
               return null;
             },
-          ),
-          const SizedBox(height: 16.0),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _rememberMe = !_rememberMe;
-                      });
-                    },
-                    child: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: _rememberMe ? const Color(0xFF2D3748) : Colors.white,
-                        border: Border.all(
-                          color: const Color(0xFF2D3748),
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: _rememberMe
-                          ? const Icon(Icons.check, color: Colors.white, size: 16)
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8.0),
-                  const Text(
-                    'Remember me',
-                    style: TextStyle(
-                      color: Color(0xFF2D3748),
-                      fontSize: 14.0,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              TextButton(
-                onPressed: _showForgotPasswordDialog,
-                child: const Text(
-                  'Forgot Password',
-                  style: TextStyle(
-                    color: Color(0xFF2D3748),
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14.0,
-                  ),
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 32.0),
           

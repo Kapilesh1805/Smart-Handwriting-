@@ -1,12 +1,26 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 class Config {
-  // Change this to your backend IP/URL
-  // For local testing: http://192.168.x.x:5000 (your machine IP)
-  // For production: https://your-backend-domain.com
-  static const String apiBaseUrl = 'http://localhost:5000';
+  /// Centralized backend base URL.
+  /// Default is localhost equivalent using loopback IP to avoid name resolution issues.
+  /// Change `baseUrl` here if you want a different default.
+  static const String baseUrl = 'http://127.0.0.1:5000';
+
+  /// API base url getter - uses Android emulator alias when running on Android.
+  static String get apiBaseUrl {
+    try {
+      if (!kIsWeb && Platform.isAndroid) {
+        return 'http://10.0.2.2:5000';
+      }
+    } catch (_) {
+      // Platform not available or other issue - fallback to baseUrl
+    }
+    return baseUrl;
+  }
 
   static Future<Map<String, String>> getAuthHeaders() async {
     final token = await getAuthToken();
@@ -26,12 +40,15 @@ class Config {
     return prefs.getString('user_id');
   }
 
-  static Future<void> saveAuthToken(String token, String userId, {String? userName}) async {
+  static Future<void> saveAuthToken(String token, String userId, {String? userName, String? userEmail}) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
     await prefs.setString('user_id', userId);
     if (userName != null) {
       await prefs.setString('user_name', userName);
+    }
+    if (userEmail != null) {
+      await prefs.setString('user_email', userEmail);
     }
   }
 
@@ -61,6 +78,9 @@ Future<http.Response> apiCall(
 }) async {
   final headers = await Config.getAuthHeaders();
   final url = Uri.parse('${Config.apiBaseUrl}$endpoint');
+
+  // Log every API call
+  print('Calling: ${Config.apiBaseUrl}$endpoint');
 
   try {
     switch (method.toUpperCase()) {

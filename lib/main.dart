@@ -2,8 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'utils/theme_service.dart';
 import 'screens/landing_page.dart';
+import 'services/handwriting_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Run backend health check on app start
+  print('🔌 Running backend health check...');
+  final backendHealthy = await HandwritingService.checkBackendStatus();
+  print(backendHealthy ? '✅ Backend is online' : '⚠️ Backend is offline');
+  
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeService(),

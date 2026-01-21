@@ -14,8 +14,7 @@ class PreWritingPracticePage extends StatefulWidget {
 
 class _PreWritingPracticePageState extends State<PreWritingPracticePage> {
   String _selectedTool = 'pen';
-  List<DrawingStroke> _strokes = [];
-  DrawingStroke? _currentStroke;
+  final List<DrawingStroke> _strokes = [];
   
   void _selectTool(String tool) {
     setState(() {
@@ -23,35 +22,9 @@ class _PreWritingPracticePageState extends State<PreWritingPracticePage> {
     });
   }
 
-  void _startDrawing(Offset position) {
-    _currentStroke = DrawingStroke(
-      tool: _selectedTool,
-      points: [position],
-      color: Colors.orange,
-    );
-  }
-
-  void _updateDrawing(Offset position) {
-    if (_currentStroke == null) return;
-    
-    setState(() {
-      _currentStroke!.points.add(position);
-    });
-  }
-
-  void _endDrawing() {
-    if (_currentStroke != null && _currentStroke!.points.isNotEmpty) {
-      setState(() {
-        _strokes.add(_currentStroke!);
-        _currentStroke = null;
-      });
-    }
-  }
-
   void _clearCanvas() {
     setState(() {
       _strokes.clear();
-      _currentStroke = null;
     });
   }
 

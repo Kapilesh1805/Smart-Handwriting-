@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../sections/pre_writing_section.dart';
 
 class PreWritingPage extends StatelessWidget {
-  const PreWritingPage({Key? key}) : super(key: key);
+  const PreWritingPage({super.key});
 
   @override
   Widget build(BuildContext context) {

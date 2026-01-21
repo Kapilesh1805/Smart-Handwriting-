@@ -1,6 +1,5 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 
 class AuthService {
@@ -32,6 +31,7 @@ class AuthService {
           data['token'] as String,
           data['user_id'] as String,
           userName: data['user_name'] as String?,
+          userEmail: email,
         );
 
         return {
@@ -89,6 +89,7 @@ class AuthService {
           data['token'] as String,
           data['user_id'] as String,
           userName: data['name'] as String?,
+          userEmail: email,
         );
 
         return {
@@ -104,47 +105,6 @@ class AuthService {
         throw Exception(data['error'] ?? 'Invalid registration data');
       } else {
         throw Exception('Registration failed. Please try again.');
-      }
-    } on SocketException catch (_) {
-      throw Exception(
-        'No internet connection. Please check your network.',
-      );
-    } on TimeoutException catch (_) {
-      throw Exception('Request timeout. Please try again.');
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  /// Forgot password - request password reset token
-  /// Returns: {msg, reset_token} on success
-  /// Throws: Exception with error message on failure
-  static Future<Map<String, dynamic>> forgotPassword({
-    required String email,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${Config.apiBaseUrl}/auth/forgot_password'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-        }),
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Request timeout'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {
-          'msg': data['msg'],
-          'reset_token': data['reset_token'],
-          'success': true,
-        };
-      } else if (response.statusCode == 404) {
-        throw Exception('Email not found');
-      } else {
-        throw Exception('Password reset failed. Please try again.');
       }
     } on SocketException catch (_) {
       throw Exception(

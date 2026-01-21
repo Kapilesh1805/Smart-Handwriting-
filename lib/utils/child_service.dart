@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/child_profile.dart';
+import '../config/api_config.dart';
 
 class ChildService {
-  static const String _baseUrl = 'http://localhost:5000';
+  // Use Config.apiBaseUrl instead of hardcoding
 
   // Fetch all children from backend
   static Future<List<ChildProfile>> fetchChildren() async {
@@ -12,7 +13,7 @@ class ChildService {
       debugPrint('📚 Fetching children from backend...');
       
       final response = await http.get(
-        Uri.parse('$_baseUrl/child/get_all'),
+        Uri.parse('${Config.apiBaseUrl}/child/get_all'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
@@ -57,7 +58,7 @@ class ChildService {
       debugPrint('➕ Adding new child: $name');
       
       final response = await http.post(
-        Uri.parse('$_baseUrl/child/add'),
+        Uri.parse('${Config.apiBaseUrl}/child/add'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': name,
@@ -98,7 +99,7 @@ class ChildService {
       debugPrint('🗑️ Deleting child: $childId');
       
       final response = await http.delete(
-        Uri.parse('$_baseUrl/child/$childId'),
+        Uri.parse('${Config.apiBaseUrl}/child/$childId'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
@@ -128,7 +129,7 @@ class ChildService {
       debugPrint('✏️ Updating child: $childId');
       
       final response = await http.put(
-        Uri.parse('$_baseUrl/child/$childId'),
+        Uri.parse('${Config.apiBaseUrl}/child/$childId'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'name': name,

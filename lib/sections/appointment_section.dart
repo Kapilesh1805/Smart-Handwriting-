@@ -1,6 +1,91 @@
 import 'package:flutter/material.dart';
-import '../widgets/appointment_widgets.dart';
+import 'package:intl/intl.dart';
 import '../services/appointment_service.dart';
+import '../config/api_config.dart';
+
+// File-level status color helper used by sidebar and other widgets
+Color statusColor(String status) {
+  final s = status.toLowerCase();
+  if (s.contains('completed')) return const Color(0xFF4CAF50);
+  if (s.contains('pending')) return const Color(0xFFFFC107);
+  return Colors.grey;
+}
+
+// Reusable sidebar widget that fetches appointments for a given date
+class SidebarAppointmentList extends StatelessWidget {
+  final DateTime date;
+  const SidebarAppointmentList({super.key, required this.date});
+
+  Future<List<Appointment>> _fetchForDate() async {
+    final all = await AppointmentService.getAllAppointments();
+    final filtered = all.where((a) {
+      try {
+        final parsed = DateTime.tryParse(a.date) ?? DateFormat('yyyy-MM-dd').parseLoose(a.date);
+        return parsed.year == date.year && parsed.month == date.month && parsed.day == date.day;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+    // sort by time HH:mm
+    filtered.sort((a, b) {
+      try {
+        final ap = a.time.split(':');
+        final bp = b.time.split(':');
+        final am = int.parse(ap[0]) * 60 + int.parse(ap[1]);
+        final bm = int.parse(bp[0]) * 60 + int.parse(bp[1]);
+        return am.compareTo(bm);
+      } catch (_) {
+        return a.time.compareTo(b.time);
+      }
+    });
+    return filtered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return FutureBuilder<List<Appointment>>(
+      future: _fetchForDate(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Center(child: SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary))),
+          );
+        }
+        if (snap.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text('Error loading appointments', style: theme.textTheme.bodySmall),
+          );
+        }
+        final todays = snap.data ?? [];
+        if (todays.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Text('No appointments', style: theme.textTheme.bodySmall),
+          );
+        }
+        return Column(
+          children: todays.map((a) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6.0),
+              child: Row(
+                children: [
+                  CircleAvatar(radius: 14, backgroundColor: statusColor(a.status), child: const Icon(Icons.person, size: 16, color: Colors.white)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(a.sessionType.isNotEmpty ? a.sessionType : 'Session', style: const TextStyle(fontWeight: FontWeight.w600))),
+                  const SizedBox(width: 8),
+                  Text(a.time),
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+}
 
 class AppointmentSection extends StatefulWidget {
   const AppointmentSection({super.key});
@@ -10,558 +95,379 @@ class AppointmentSection extends StatefulWidget {
 }
 
 class _AppointmentSectionState extends State<AppointmentSection> {
-  DateTime selectedDay = DateTime.now();
-  Map<int, SlotData> appointments = {};
-  List<Appointment> _allAppointments = [];
+  bool _loading = true;
+  String? _error;
+
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _fetchAppointments();
+    _loadAppointments();
   }
 
-  Future<void> _fetchAppointments() async {
+  Future<void> _loadAppointments() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
     try {
-      final allAppointments = await AppointmentService.getAllAppointments();
-      
+      await AppointmentService.getAllAppointments();
       if (mounted) {
         setState(() {
-          _allAppointments = allAppointments;
-          _loadAppointmentsForDay(selectedDay);
+          _loading = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
-        );
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
       }
     }
   }
 
-  void _loadAppointmentsForDay(DateTime day) {
-    appointments.clear();
-    final dayStr = '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-    
-    print('📅 Loading appointments for day: $dayStr');
-    print('📋 Total appointments available: ${_allAppointments.length}');
-    
-    int matchedCount = 0;
-    for (var apt in _allAppointments) {
-      print('  Checking: apt.date="${apt.date}" vs dayStr="$dayStr"');
-      if (apt.date == dayStr) {
-        matchedCount++;
-        print('    ✅ MATCH FOUND: ${apt.childName} at ${apt.time}');
-        final timeParts = apt.time.split(':');
-        final hour = int.tryParse(timeParts[0]) ?? 0;
-        
-        final Color statusColor = apt.status == 'completed'
-            ? const Color(0xFF22C55E)
-            : apt.status == 'pending'
-            ? const Color(0xFFF59E0B)
-            : const Color(0xFFEF4444);
-        
-        appointments[hour] = SlotData(apt.childName, statusColor);
-      }
-    }
-    
-    print('📊 Total matched appointments for $dayStr: $matchedCount');
+  List<DateTime> _weekDays(DateTime center) {
+    final int weekday = center.weekday; // 1=Mon .. 7=Sun
+    final start = center.subtract(Duration(days: weekday - 1));
+    return List.generate(7, (i) => DateTime(start.year, start.month, start.day + i));
   }
 
-  String _formatHour12(int hour24) {
-    final period = hour24 >= 12 ? 'PM' : 'AM';
-    int hour = hour24 % 12;
-    if (hour == 0) hour = 12;
-    final label = hour.toString().padLeft(2, '0');
-    return '$label:00 $period';
-  }
+  // Note: appointment filtering and status color are handled by
+  // SidebarAppointmentList and the top-level `statusColor` helper.
 
-  void _showAddAppointmentDialog() {
+  Future<void> _showAddAppointmentDialog() async {
     final formKey = GlobalKey<FormState>();
-    final childNameCtrl = TextEditingController();
-    final therapistNameCtrl = TextEditingController();
-    final sessionTypeCtrl = TextEditingController();
-    String selectedHour = '09';
-    bool isSubmitting = false;
-
-    showDialog(
+    String childName = '';
+    String sessionType = '';
+    await showDialog<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          title: const Text('Schedule Session'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
+      builder: (ctx) {
+        TimeOfDay? localPickedTime;
+        return StatefulBuilder(builder: (ctx2, setStateDialog) {
+          final messenger = ScaffoldMessenger.of(ctx2);
+
+          return AlertDialog(
+            title: const Text('Add Appointment'),
+            content: Form(
+              key: formKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextFormField(
-                    controller: childNameCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Child Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    decoration: const InputDecoration(labelText: 'Child name'),
+                    onChanged: (v) => childName = v.trim(),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter child name' : null,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: therapistNameCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'Therapist Name',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: sessionTypeCtrl.text.isEmpty ? 'Writing' : sessionTypeCtrl.text,
-                    decoration: InputDecoration(
-                      labelText: 'Session Type',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: ['Writing', 'Pre-Writing', 'Sentence', 'General']
-                        .map((type) => DropdownMenuItem(value: type, child: Text(type)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) sessionTypeCtrl.text = value;
-                    },
-                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    decoration: const InputDecoration(labelText: 'Test'),
+                    items: const [
+                      DropdownMenuItem(value: 'Handwriting Assessment', child: Text('Handwriting Assessment')),
+                      DropdownMenuItem(value: 'Pressure Test', child: Text('Pressure Test')),
+                      DropdownMenuItem(value: 'Speed Test', child: Text('Speed Test')),
+                    ],
+                    onChanged: (v) => sessionType = v ?? '',
+                    validator: (v) => (v == null || v.isEmpty) ? 'Select test' : null,
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedHour,
-                    decoration: InputDecoration(
-                      labelText: 'Time',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
-                    items: List.generate(24, (i) {
-                      final hour = i.toString().padLeft(2, '0');
-                      return DropdownMenuItem(value: hour, child: Text('$hour:00'));
-                    }),
-                    onChanged: (value) {
-                      if (value != null) setState(() => selectedHour = value);
-                    },
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(localPickedTime == null
+                            ? 'Select time'
+                            : '${localPickedTime!.hour.toString().padLeft(2, '0')}:${localPickedTime!.minute.toString().padLeft(2, '0')}'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final t = await showTimePicker(context: ctx2, initialTime: TimeOfDay(hour: 9, minute: 0));
+                          if (t != null) {
+                            setStateDialog(() {
+                              localPickedTime = t;
+                            });
+                          }
+                        },
+                        child: const Text('Pick Time'),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                      if (formKey.currentState!.validate()) {
-                        setState(() => isSubmitting = true);
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  if (!(formKey.currentState?.validate() ?? false)) return;
+                  if (localPickedTime == null) {
+                    if (!mounted) return;
+                    messenger.showSnackBar(const SnackBar(content: Text('Please pick a time')));
+                    return;
+                  }
 
-                        try {
-                          final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
-                          
-                          await AppointmentService.addAppointment(
-                            childName: childNameCtrl.text,
-                            therapistName: therapistNameCtrl.text,
-                            sessionType: sessionTypeCtrl.text,
-                            date: dayStr,
-                            time: '$selectedHour:00',
-                          );
+                  // Build date/time strings
+                  final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+                  final picked = localPickedTime!;
+                  final timeStr = '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}';
 
-                          Navigator.pop(ctx);
-                          await _fetchAppointments();
-                          if (mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Session scheduled for ${childNameCtrl.text}')),
-                            );
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            setState(() => isSubmitting = false);
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
-                            );
-                          }
-                        }
-                      }
-                    },
-              child: isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Schedule'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error saving appointment: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_API_KEY',
-  //         'Content-Type': 'application/json',
-  //       },
-  //     );
-  //
-  //     if (response.statusCode == 200) {
-  //       if (mounted) {
-  //         setState(() {
-  //           appointments.remove(hour);
-  //         });
-  //         ScaffoldMessenger.of(context).showSnackBar(
-  //           const SnackBar(content: Text('Appointment deleted')),
-  //         );
-  //       }
-  //     }
-  //   } catch (e) {
-  //     if (mounted) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error deleting appointment: $e')),
-  //       );
-  //     }
-  //   }
-  // }
-
-  @override
-  Widget build(BuildContext context) {
-    final DateTime start = selectedDay.subtract(
-      Duration(days: selectedDay.weekday),
-    );
-    final dates = List<DateTime>.generate(
-      6,
-      (i) => start.add(Duration(days: i + 1)),
-    );
-    return ListView(
-      children: [
-        Row(
-          children: [
-            Text(
-              _formatMonthYear(selectedDay),
-              style: const TextStyle(
-                fontSize: 22.0,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(width: 16.0),
-            IconPill(icon: Icons.chevron_left, onTap: () => _shiftDays(-7)),
-            const SizedBox(width: 8.0),
-            IconPill(icon: Icons.chevron_right, onTap: () => _shiftDays(7)),
-            const Spacer(),
-            RoundAction(
-              icon: Icons.add,
-              label: 'Add Session',
-              onTap: _showAddAppointmentDialog,
-            ),
-            const SizedBox(width: 16.0),
-          ],
-        ),
-        const SizedBox(height: 12.0),
-        Row(
-          children: dates
-              .map(
-                (d) => Expanded(
-                  child: DateChip(
-                    date: d,
-                    isSelected: _isSameDay(d, selectedDay),
-                    onTap: () {
-                      setState(() {
-                        selectedDay = d;
-                        _loadAppointmentsForDay(d);
+                    try {
+                      final therapistName = (await Config.getUserName()) ?? 'Therapist';
+                      await AppointmentService.addAppointment(
+                        childName: childName,
+                        therapistName: therapistName,
+                        sessionType: sessionType,
+                        date: dateStr,
+                        time: timeStr,
+                      );
+                      // close dialog first
+                      Navigator.pop(ctx2);
+                      // refresh and show snackbar in a post-frame callback to avoid using
+                      // build context across async gaps.
+                      if (!mounted) return;
+                      _loadAppointments();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        messenger.showSnackBar(const SnackBar(content: Text('Appointment added')));
                       });
-                    },
-                  ),
-                ),
-              )
-              .toList(),
-        ),
-        const SizedBox(height: 6.0),
-        const Text(
-          'Work in Progress',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.0),
-        ),
-        const SizedBox(height: 6.0),
-        SizedBox(height: 340.0, child: _buildCompactTimeline()),
-        const SizedBox(height: 8.0),
-        const Legend(color: Color(0xFF22C55E), label: 'Completed'),
-        const Legend(color: Color(0xFFF59E0B), label: 'Pending'),
-        const Legend(color: Color(0xFFEF4444), label: 'Missed'),
-      ],
-    );
-  }
-
-  Widget _buildCompactTimeline() {
-    final Map<int, SlotData> data = appointments;
-    return ListView.builder(
-      itemCount: 24,
-      itemBuilder: (context, i) {
-        final labelHour = _formatHour12(i);
-        final slot = data[i];
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 100.0,
-                child: Text(
-                  labelHour,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14.0,
-                  ),
-                ),
+                    } catch (e) {
+                      Navigator.pop(ctx2);
+                      if (!mounted) return;
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (!mounted) return;
+                        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                      });
+                    }
+                },
+                child: const Text('Add'),
               ),
-              const SizedBox(width: 12.0),
-              if (slot != null) ...[
-                Container(
-                  margin: const EdgeInsets.only(right: 12.0),
-                  width: 28.0,
-                  height: 28.0,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: slot.color, width: 2.0),
-                  ),
-                  child: const Icon(
-                    Icons.person,
-                    size: 14.0,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                const SizedBox(width: 12.0),
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _editAppointment(context, i, slot),
-                    borderRadius: BorderRadius.circular(20.0),
-                    child: Container(
-                      height: 36.0,
-                      decoration: BoxDecoration(
-                        color: slot.color,
-                        borderRadius: BorderRadius.circular(20.0),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              slot.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14.0,
-                              ),
-                            ),
-                          ),
-                          const Icon(
-                            Icons.edit,
-                            size: 16.0,
-                            color: Colors.white70,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
-        );
+          );
+        });
       },
     );
   }
 
-  void _editAppointment(BuildContext context, int hour, SlotData slot) {
-    final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController(text: slot.label);
-    String selectedStatus = slot.color == const Color(0xFF22C55E)
-        ? 'completed'
-        : slot.color == const Color(0xFFF59E0B)
-        ? 'pending'
-        : 'missed';
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Edit Appointment - ${_formatHour12(hour)}'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Error loading appointments', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(_error!),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _loadAppointments, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    final days = _weekDays(_selectedDate);
+    final monthLabel = DateFormat('MMMM yyyy').format(_selectedDate);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header: month + arrows + small note
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1, 1);
+                          });
+                        },
+                      ),
+                      Text(monthLabel, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: () {
+                          setState(() {
+                            _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text('Work in Progress', style: theme.textTheme.bodySmall),
+                ],
+              ),
+            ),
+            // Big buttons
+            Column(
               children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Required' : null,
+                ElevatedButton.icon(
+                  onPressed: () => _showAddAppointmentDialog(),
+                  icon: const Icon(Icons.add, size: 20),
+                  label: const Text('Add Appointment'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    backgroundColor: Colors.black,
+                  ),
                 ),
-                const SizedBox(height: 16.0),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedStatus,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'completed',
-                      child: Text('Completed'),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () => showDialog(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Set Reminder'),
+                      content: const Text('Set Reminder UI will be implemented here.'),
+                      actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close'))],
                     ),
-                    DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                    DropdownMenuItem(value: 'missed', child: Text('Missed')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setDialogState(() => selectedStatus = val);
-                    }
-                  },
+                  ),
+                  icon: const Icon(Icons.notifications, size: 20),
+                  label: const Text('Set Reminder'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    backgroundColor: Colors.black,
+                  ),
                 ),
               ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.of(ctx).pop();
-                if (mounted) {
-                  setState(() {
-                    appointments.remove(hour);
-                  });
-                  // Find the appointment ID to delete
-                  final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
-                  final aptToDelete = _allAppointments.firstWhere(
-                    (apt) => apt.date == dayStr && apt.childName == slot.label,
-                    orElse: () => Appointment(
-                      id: '',
-                      childName: '',
-                      therapistName: '',
-                      sessionType: '',
-                      date: '',
-                      time: '',
-                      status: 'pending',
-                    ),
-                  );
-                  
-                  if (aptToDelete.id.isNotEmpty) {
-                    try {
-                      await AppointmentService.deleteAppointment(aptToDelete.id);
-                      await _fetchAppointments();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Appointment deleted')),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
-                        );
-                      }
-                    }
-                  }
-                }
-              },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState!.validate()) {
-                  Navigator.of(ctx).pop();
-                  
-                  // Find the appointment to update
-                  final dayStr = '${selectedDay.year}-${selectedDay.month.toString().padLeft(2, '0')}-${selectedDay.day.toString().padLeft(2, '0')}';
-                  final aptToUpdate = _allAppointments.firstWhere(
-                    (apt) => apt.date == dayStr && apt.childName == slot.label,
-                    orElse: () => Appointment(
-                      id: '',
-                      childName: '',
-                      therapistName: '',
-                      sessionType: '',
-                      date: '',
-                      time: '',
-                      status: 'pending',
-                    ),
-                  );
-                  
-                  if (aptToUpdate.id.isNotEmpty) {
-                    try {
-                      print('🔄 Updating appointment ${aptToUpdate.id} status to $selectedStatus');
-                      await AppointmentService.updateAppointmentStatus(
-                        appointmentId: aptToUpdate.id,
-                        status: selectedStatus,
-                      );
-                      
-                      // Refresh appointments to get the latest data from backend
-                      await _fetchAppointments();
-                      
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Appointment updated')),
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error: ${e.toString().replaceFirst('Exception: ', '')}')),
-                        );
-                      }
-                    }
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
           ],
         ),
-      ),
+
+        const SizedBox(height: 16),
+
+        // Week day bubbles
+        SizedBox(
+          height: 72,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: days.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, idx) {
+              final d = days[idx];
+              final isSelected = d.year == _selectedDate.year && d.month == _selectedDate.month && d.day == _selectedDate.day;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedDate = d),
+                child: Container(
+                  width: 84,
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFFF6B35) : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(DateFormat.E().format(d), style: TextStyle(color: isSelected ? Colors.white : Colors.black54)),
+                      const SizedBox(height: 6),
+                      Text(DateFormat.d().format(d), style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black87)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 18),
+
+        // Time slots (left column main area)
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left: time slots (12 AM to 12 PM)
+                  Expanded(
+                flex: 3,
+                child: ListView.builder(
+                  itemCount: 24, // hours 0..23 (full day)
+                  itemBuilder: (context, idx) {
+                    final hour = idx; // 0..23
+                    final timeLabel = DateFormat('HH:mm').format(DateTime(2000, 1, 1, hour));
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Row(
+                        children: [
+                          SizedBox(width: 80, child: Text(timeLabel, style: const TextStyle(fontWeight: FontWeight.w600))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Container(
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(22),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: const Text(''),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(width: 24),
+
+              // Right: selected-day appointment summary + legend
+              Expanded(
+                flex: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Small card showing selected date and appointments
+                    Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SidebarAppointmentList(date: _selectedDate),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    const Text('Color coding:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFF4CAF50), shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      const Text('Completed'),
+                    ]),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFFFFC107), shape: BoxShape.circle)),
+                      const SizedBox(width: 8),
+                      const Text('Pending'),
+                    ]),
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
-  }
-
-  void _shiftDays(int delta) {
-    setState(() {
-      selectedDay = selectedDay.add(Duration(days: delta));
-      _loadAppointmentsForDay(selectedDay);
-    });
-  }
-
-  String _formatMonthYear(DateTime d) {
-    const months = [
-      'JANUARY',
-      'FEBRUARY',
-      'MARCH',
-      'APRIL',
-      'MAY',
-      'JUNE',
-      'JULY',
-      'AUGUST',
-      'SEPTEMBER',
-      'OCTOBER',
-      'NOVEMBER',
-      'DECEMBER',
-    ];
-    return '${months[d.month - 1]} ${d.year}';
-  }
-
-  bool _isSameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-}
-
-extension StringExtension on String {
-  String capitalize() {
-    return '${this[0].toUpperCase()}${substring(1)}';
   }
 }

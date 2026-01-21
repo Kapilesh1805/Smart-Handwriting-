@@ -175,12 +175,12 @@ class SignOutButton extends StatelessWidget {
         decoration: BoxDecoration(
           // ==================== USE THEME COLOR ====================
           color: isDarkMode
-              ? Colors.red.shade900.withOpacity(0.2)
+              ? Colors.red.shade900.withValues(alpha: 0.2)
               : Colors.red.shade50,
           borderRadius: BorderRadius.circular(12.0),
           border: Border.all(
             color: isDarkMode
-                ? Colors.red.shade800.withOpacity(0.5)
+                ? Colors.red.shade800.withValues(alpha: 0.5)
                 : Colors.red.shade200,
           ),
           // ==================================================

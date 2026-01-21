@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'dart:ui' as ui;
+import 'dart:convert';
+import 'dart:typed_data';
 import '../widgets/unified_writing_canvas.dart';
 import '../services/child_service.dart';
 import '../services/handwriting_service.dart';
 import '../config/api_config.dart';
+import '../utils/pressure_utils.dart';
 import '../models/child_profile.dart';
+import '../utils/scroll_lock_manager.dart';
 
 class WritingInterfaceSection extends StatefulWidget {
   final String? childId;
@@ -95,6 +101,7 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
 
   // Canvas reference
   final GlobalKey<UnifiedWritingCanvasState> canvasKey = GlobalKey();
+  final GlobalKey repaintBoundaryKey = GlobalKey();
   final ScrollController _characterScrollController = ScrollController();
 
   String currentCharacter = 'A';
@@ -104,12 +111,19 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
   double strokeWidth = 5.0;
   String feedback = '';
   bool showFeedback = false;
+  
+  // ✅ COMPUTED PROPERTY: Always sync with actual mode state
+  String get currentEvaluationMode => isNumberMode ? 'number' : 'alphabet';
 
   // Backend integration variables
   bool isProcessingML = false;
   bool isBackendConnected = false;
-  double mlConfidenceScore = 0.0;
-  Map<String, dynamic> mlFeedback = {};
+  HandwritingAnalysis? _analysisResult;
+  double? lastPressure;
+  double? rawPressure;
+  int? pressurePointCount;
+  bool showRawPressure = false;
+  List<dynamic>? rawPressurePoints;
 
   List<String> get currentList => isNumberMode ? numbers : letters;
 
@@ -229,6 +243,19 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
       return;
     }
 
+    // Compute and display local pressure immediately from canvas so user sees feedback
+    final localPressureData = canvasKey.currentState?.getPressurePoints() ?? [];
+    if (localPressureData.isNotEmpty) {
+      debugPrint('First few pressures: ${localPressureData.take(5).map((p) => p['pressure'])}');
+      final avg = PressureUtils.computeAveragePressure(localPressureData);
+      setState(() {
+        lastPressure = avg;
+        rawPressure = localPressureData.last['pressure'];
+        pressurePointCount = localPressureData.length;
+        rawPressurePoints = localPressureData;
+      });
+    }
+
     if (isBackendConnected) {
       await _sendToMLModel();
     } else {
@@ -263,28 +290,40 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
 
       debugPrint('📊 Canvas data - Strokes: ${strokesData.length}, Pressure points: ${pressureData.length}');
 
-      // Send to backend for ML analysis
+      // ✅ Capture canvas as image and convert to base64
+      String? imageBase64;
+      try {
+        imageBase64 = await _captureCanvasAsBase64();
+        if (imageBase64 != null) {
+          debugPrint('📸 Canvas captured as image (${imageBase64.length} bytes)');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Failed to capture canvas image: $e');
+      }
+
+      // Send to backend for ML analysis (now with image!)
+      debugPrint('📤 DEBUG: Sending request with evaluationMode=$currentEvaluationMode (isNumberMode=$isNumberMode)');
+      
       final analysis = await HandwritingService.analyzeHandwriting(
         childId: selectedChildId!,
         letter: currentCharacter,
+        evaluationMode: currentEvaluationMode,
+        imageBase64: imageBase64,
         strokesData: strokesData,
         pressureData: pressureData,
       );
+      // Store the typed HandwritingAnalysis directly.
 
       setState(() {
-        mlConfidenceScore = analysis.overallScore / 100;
-        mlFeedback = {
-          'pressure_score': analysis.pressureScore,
-          'spacing_score': analysis.spacingScore,
-          'formation_score': analysis.formationScore,
-          'accuracy_score': analysis.accuracyScore,
-          'overall_score': analysis.overallScore,
-          'feedback': analysis.feedback,
-          'model_used': analysis.modelUsed,
-        };
+        _analysisResult = analysis;
         isProcessingML = false;
-        feedback = _generateMLFeedback(mlFeedback);
         showFeedback = true;
+        // If backend returned a numeric pressure and no frontend pressure, use backend
+        if (_analysisResult?.pressure != null && lastPressure == null) {
+          lastPressure = _analysisResult!.pressure;
+        }
+        // Preserve any raw pressure points returned by backend
+        rawPressurePoints = _analysisResult?.rawPressurePoints ?? rawPressurePoints;
       });
 
       debugPrint('✅ Analysis complete');
@@ -297,50 +336,40 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
     }
   }
 
-  String _generateMLFeedback(Map<String, dynamic> result) {
-    final double overallScore = (result['overall_score'] ?? 0.0).toDouble();
-    final double pressureScore = (result['pressure_score'] ?? 0.0).toDouble();
-    final double spacingScore = (result['spacing_score'] ?? 0.0).toDouble();
-    final double formationScore = (result['formation_score'] ?? 0.0).toDouble();
-    final String feedback = result['feedback'] ?? 'Analysis complete';
-    final bool modelUsed = result['model_used'] ?? false;
+  /// Capture the canvas drawing as a PNG image and encode it as base64
+  Future<String?> _captureCanvasAsBase64() async {
+    try {
+      final RenderRepaintBoundary boundary =
+          repaintBoundaryKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
 
-    String feedbackText = '';
-
-    // Main feedback from ML model
-    feedbackText = feedback;
-
-    // Add model status
-    if (modelUsed) {
-      feedbackText += '\n✅ Real ML model analysis';
-    } else {
-      feedbackText += '\n📊 Simulated analysis (ML model loading)';
+      // Try capture with increasing pixelRatio for reliability
+      for (final ratio in [2.0, 3.0]) {
+        try {
+          await Future.delayed(const Duration(milliseconds: 50));
+          final ui.Image image = await boundary.toImage(pixelRatio: ratio);
+          final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+          if (byteData != null) {
+            final Uint8List pngBytes = byteData.buffer.asUint8List();
+            final String base64Image = base64Encode(pngBytes);
+            return 'data:image/png;base64,$base64Image';
+          }
+        } catch (e) {
+          debugPrint('Canvas capture attempt (ratio=$ratio) failed: $e');
+          continue;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error capturing canvas: $e');
     }
-
-    // Add score breakdown
-    feedbackText += '\n\n📈 Score Breakdown:';
-    feedbackText += '\n• Overall: ${overallScore.toStringAsFixed(1)}%';
-    feedbackText += '\n• Pressure: ${pressureScore.toStringAsFixed(1)}%';
-    feedbackText += '\n• Spacing: ${spacingScore.toStringAsFixed(1)}%';
-    feedbackText += '\n• Formation: ${formationScore.toStringAsFixed(1)}%';
-
-    // Add recommendations
-    if (pressureScore < 70) {
-      feedbackText += '\n\n💪 Tip: Apply more consistent pressure on the pen';
-    }
-    if (spacingScore < 70) {
-      feedbackText += '\n💡 Tip: Improve spacing between strokes';
-    }
-    if (formationScore < 70) {
-      feedbackText += '\n✍️ Tip: Work on letter formation and shape';
-    }
-
-    return feedbackText;
+    return null;
   }
+
+  // Legacy feedback generation removed. Rendering is now driven directly
+  // by `backendResult` in `_buildFeedback()` per frontend contract.
 
   void _showBackendNotConnectedMessage() {
     setState(() {
-      feedback = '🔌 Backend not connected!\n\nPlease ensure the backend server is running at http://localhost:8000';
+      feedback = '🔌 Backend not connected!\n\nPlease ensure the backend server is running at ${Config.apiBaseUrl}';
       showFeedback = true;
     });
 
@@ -367,9 +396,15 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
         title: const Text('Writing Practice'),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
+      body: ValueListenableBuilder<bool>(
+        valueListenable: scrollLockManager.isScrollLocked,
+        builder: (context, locked, _) {
+          return SingleChildScrollView(
+            physics: locked
+                ? const NeverScrollableScrollPhysics()
+                : const BouncingScrollPhysics(),
+            child: Column(
+              children: [
             // CHILD SELECTION DROPDOWN
             Container(
               color: Colors.white,
@@ -440,9 +475,24 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
-                        onPressed: () => setState(() => isNumberMode = !isNumberMode),
+                        onPressed: () {
+                          setState(() => isNumberMode = !isNumberMode);
+                          debugPrint('🔄 Mode toggled: isNumberMode=$isNumberMode, evaluationMode=$currentEvaluationMode');
+                        },
                         icon: const Icon(Icons.switch_access_shortcut),
                         label: Text(isNumberMode ? 'Numbers' : 'Letters'),
+                      ),
+                      const SizedBox(width: 8),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: scrollLockManager.isScrollLocked,
+                        builder: (context, locked, _) {
+                          return IconButton(
+                            onPressed: () => scrollLockManager.isScrollLocked.value = !locked,
+                            icon: Icon(locked ? Icons.lock : Icons.lock_open),
+                            color: locked ? Colors.red : Colors.green,
+                            tooltip: locked ? 'Unlock page scrolling' : 'Lock page scrolling',
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -515,13 +565,16 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
               color: Colors.white,
               padding: const EdgeInsets.all(12),
               height: 400,
-              child: UnifiedWritingCanvas(
-                key: canvasKey,
-                onClear: () {},
-                onUndo: () {},
-                canvasHeight: double.infinity,
-                drawingColor: selectedColor,
-                strokeWidth: strokeWidth,
+              child: RepaintBoundary(
+                key: repaintBoundaryKey,
+                child: UnifiedWritingCanvas(
+                  key: canvasKey,
+                  onClear: () {},
+                  onUndo: () {},
+                  canvasHeight: double.infinity,
+                  drawingColor: selectedColor,
+                  strokeWidth: strokeWidth,
+                ),
               ),
             ),
             // BOTTOM: Action buttons
@@ -531,13 +584,38 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
+                  // Show last pressure value if available
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text('Pressure: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                          Text('Pressure: ${pressurePointCount ?? 'N/A'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  ),
                   ElevatedButton.icon(
                     onPressed: () => canvasKey.currentState?.undoStroke(),
                     icon: const Icon(Icons.undo),
                     label: const Text('Undo'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: () => canvasKey.currentState?.clearCanvas(),
+                    onPressed: () {
+                      canvasKey.currentState?.clearCanvas();
+                      setState(() {
+                        feedback = '';
+                        showFeedback = false;
+                      });
+                      debugPrint('✅ Canvas cleared, ready for new letter');
+                    },
                     icon: const Icon(Icons.clear),
                     label: const Text('Clear'),
                   ),
@@ -546,36 +624,128 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
                     icon: isProcessingML ? null : const Icon(Icons.check),
                     label: Text(isProcessingML ? 'Analyzing...' : 'Check'),
                   ),
+                  const SizedBox(width: 8),
+                  // Toggle raw pressure view
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        showRawPressure = !showRawPressure;
+                      });
+                      // Also tell the canvas to visualize pressure dots
+                      canvasKey.currentState?.setShowPressureDots(showRawPressure);
+                    },
+                    icon: Icon(
+                      showRawPressure ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.blue,
+                    ),
+                    tooltip: 'Show raw pressure points',
+                  ),
                 ],
               ),
             ),
-            // FEEDBACK SECTION: Below buttons, scrollable with page
+            // Raw pressure points list (debug)
+            if (showRawPressure && rawPressurePoints != null) ...[
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                height: 100,
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: scrollLockManager.isScrollLocked,
+                  builder: (context, locked, _) {
+                    return SingleChildScrollView(
+                      physics: locked
+                          ? const NeverScrollableScrollPhysics()
+                          : const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: rawPressurePoints!.take(200).map((p) {
+                          try {
+                            if (p is Map) {
+                              final pr = p['pressure'] ?? p['p'] ?? p['value'] ?? p;
+                              return Text("x:${p['x'] ?? '-'} y:${p['y'] ?? '-'} p:${pr.toString()}");
+                            }
+                            return Text(p.toString());
+                          } catch (e) {
+                            return Text(p.toString());
+                          }
+                        }).toList(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
             if (showFeedback) _buildFeedback(),
-          ],
-        ),
+            ],
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildFeedback() {
-    final isError = feedback.contains('❌') || feedback.contains('Error');
-    final isWarning = feedback.contains('⚠️');
-    final isGood = feedback.contains('✅');
+    // Render UI strictly from typed HandwritingAnalysis when available.
+    Color bgColor = Colors.blue.shade50;
+    Color textColor = Colors.blue.shade900;
+    Widget content;
 
-    Color bgColor;
-    Color textColor;
-    if (isError) {
-      bgColor = Colors.red.shade50;
-      textColor = Colors.red.shade900;
-    } else if (isWarning) {
-      bgColor = Colors.orange.shade50;
-      textColor = Colors.orange.shade900;
-    } else if (isGood) {
-      bgColor = Colors.green.shade50;
-      textColor = Colors.green.shade900;
+    if (_analysisResult != null) {
+      final bool? isCorrect = _analysisResult!.isCorrect;
+
+      if (isCorrect == true) {
+        // Show numeric scores exactly as returned by backend (no transformation)
+        final double confidence = _analysisResult!.confidence;
+        final double formation = _analysisResult!.formation;
+
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade900;
+
+        final List<Widget> lines = [];
+        lines.add(const Text('✅ Correct Letter', style: TextStyle(fontWeight: FontWeight.bold)));
+        lines.add(const SizedBox(height: 8));
+        lines.add(Text('Accuracy: ${confidence.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
+        lines.add(const SizedBox(height: 4));
+        lines.add(Text('Formation: ${formation.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
+        lines.add(const SizedBox(height: 4));
+        lines.add(Text('Pressure: ${pressurePointCount ?? 'N/A'}', style: TextStyle(color: textColor)));
+
+        content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: lines,
+        );
+
+      } else if (isCorrect == false) {
+        // Show only incorrect message
+        bgColor = Colors.red.shade50;
+        textColor = Colors.red.shade900;
+        content = const Text('❌ Incorrect Letter', style: TextStyle(fontWeight: FontWeight.bold));
+      } else {
+        // If isCorrect is null, show backend-provided feedback string (not used for evaluation)
+        content = Text(_analysisResult!.feedback, style: TextStyle(color: textColor));
+      }
     } else {
-      bgColor = Colors.blue.shade50;
-      textColor = Colors.blue.shade900;
+      // No backend response yet: show generic feedback text
+      final isError = feedback.contains('❌') || feedback.contains('Error');
+      final isWarning = feedback.contains('⚠️');
+      final isGood = feedback.contains('✅');
+      if (isError) {
+        bgColor = Colors.red.shade50;
+        textColor = Colors.red.shade900;
+      } else if (isWarning) {
+        bgColor = Colors.orange.shade50;
+        textColor = Colors.orange.shade900;
+      } else if (isGood) {
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade900;
+      }
+
+      content = Text(feedback, style: TextStyle(fontSize: 13, height: 1.5, color: textColor));
     }
 
     return Container(
@@ -620,13 +790,9 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
           // Feedback content (not scrollable - page itself scrolls)
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Text(
-              feedback,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.5,
-                color: textColor,
-              ),
+            child: DefaultTextStyle(
+              style: TextStyle(fontSize: 13, height: 1.5, color: textColor),
+              child: content,
             ),
           ),
         ],

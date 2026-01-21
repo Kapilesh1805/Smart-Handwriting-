@@ -4,12 +4,12 @@ import '../widgets/sidebar.dart';
 import '../widgets/topbar.dart';
 import '../widgets/right_panel.dart';
 import '../sections/dashboard_section.dart';
-import '../sections/appointment_section.dart';
 import '../sections/writing_interface_section.dart';
 import '../sections/childrens_main.dart';
-import '../sections/assessment_report_section.dart';
+import '../sections/reports_section.dart';
 import '../sections/pre_writing_section.dart';
 import '../sections/settings_section.dart';
+import '../sections/appointment_section.dart';
 import '../sections/sentence_section.dart';
 import '../services/child_service.dart';
 import '../config/api_config.dart';
@@ -180,14 +180,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         children: [
                           Expanded(
                             flex: 3,
-                            child: _selectedSection == 'Appointment'
-                                ? const AppointmentSection()
-                                : _selectedSection == 'Writing Interface'
+                            child: _selectedSection == 'Writing Interface'
                                     ? const WritingInterfaceSection()
                                     : _selectedSection == 'Report'
-                                        ? const AssessmentReportSection(
-                                            childId: 'child_123',
-                                          )
+                                        ? ReportsSection()
                                         : _selectedSection == 'Childrens'
                                                 ? ChildrensMain(
                                                     children: _children,
@@ -199,10 +195,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                                         ? const SentenceSection()
                                                         : _selectedSection == 'Settings'
                                                             ? const SettingsSection()
-                                                            : DashboardSection(
-                                                                children: _children,
-                                                                onRefresh: _refreshChildren,
-                                                              ),
+                                                            : _selectedSection == 'Appointment'
+                                                                ? const AppointmentSection()
+                                                                : DashboardSection(
+                                                                    children: _children,
+                                                                    onRefresh: _refreshChildren,
+                                                                  ),
                           ),
                           const SizedBox(width: 24.0),
                           Expanded(

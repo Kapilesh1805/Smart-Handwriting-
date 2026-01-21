@@ -18,7 +18,6 @@ class DashboardSection extends StatefulWidget {
 }
 
 class _DashboardSectionState extends State<DashboardSection> {
-  bool _isAddingChild = false;
   String? _userId;
 
   @override
@@ -185,7 +184,7 @@ class _DashboardSectionState extends State<DashboardSection> {
         border: Border.all(color: const Color(0xFFE3E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

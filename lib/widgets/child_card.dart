@@ -9,6 +9,7 @@ class ChildCard extends StatelessWidget {
   final VoidCallback onSchedule;
 
   const ChildCard({
+    super.key,
     required this.child,
     required this.onDelete,
     required this.onViewReport,
@@ -25,7 +26,7 @@ class ChildCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE3E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -184,6 +185,7 @@ class ActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const ActionButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.color,
@@ -198,9 +200,9 @@ class ActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

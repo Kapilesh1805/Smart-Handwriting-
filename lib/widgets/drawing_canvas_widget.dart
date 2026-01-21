@@ -160,7 +160,6 @@ class DrawingPainter extends CustomPainter {
       for (int i = 0; i < points.length - 1; i++) {
         final current = points[i];
         final next = points[i + 1];
-        final nextNext = i + 2 < points.length ? points[i + 2] : next;
         
         final xMid = (current.dx + next.dx) / 2;
         final yMid = (current.dy + next.dy) / 2;

@@ -527,7 +527,7 @@ class _AssessmentReportSectionState extends State<AssessmentReportSection> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: gradeColor.withOpacity(0.1),
+                color: gradeColor.withValues(alpha: 0.1),
                 border: Border.all(color: gradeColor, width: 2.5),
                 borderRadius: BorderRadius.circular(8),
               ),

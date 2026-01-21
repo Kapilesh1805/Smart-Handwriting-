@@ -6,7 +6,9 @@ import '../services/child_service.dart';
 import '../config/api_config.dart';
 
 class ReportsSection extends StatefulWidget {
-  const ReportsSection({super.key});
+  final String? childIdContext;
+  
+  const ReportsSection({super.key, this.childIdContext});
 
   @override
   State<ReportsSection> createState() => _ReportsSectionState();
@@ -14,96 +16,147 @@ class ReportsSection extends StatefulWidget {
 
 class _ReportsSectionState extends State<ReportsSection> {
   List<Child> childrenList = [];
-  String? selectedChildId;
+  Child? selectedChild;
   ChildReport? currentReport;
-  bool isLoading = false;
-  String errorMessage = '';
+  bool isLoading = true;
+  String? errorMessage;
+  String? userId;
 
   @override
   void initState() {
     super.initState();
-    _loadChildren();
+    _initialize();
   }
 
-  Future<void> _loadChildren() async {
-    setState(() => isLoading = true);
+  Future<void> _initialize() async {
     try {
-      final userId = await Config.getUserId();
-      if (userId == null) throw Exception('User not authenticated');
-      final children = await ChildService.getChildren(userId: userId);
-      setState(() {
-        childrenList = children;
-        if (children.isNotEmpty) {
-          selectedChildId = children.first.childId;
-          _loadReport();
-        }
-      });
+      userId = await Config.getUserId();
+      if (userId == null) {
+        setState(() {
+          errorMessage = 'User not authenticated. Please login again.';
+          isLoading = false;
+        });
+        return;
+      }
+
+      // Load children
+      await _loadChildren();
+      
+      // If childIdContext provided (navigated from children page), select that child
+      if (widget.childIdContext != null && childrenList.isNotEmpty) {
+        final contextChild = childrenList.firstWhere(
+          (c) => c.childId == widget.childIdContext,
+          orElse: () => childrenList.first,
+        );
+        setState(() => selectedChild = contextChild);
+        await _loadReport(contextChild.childId);
+      } else if (childrenList.isNotEmpty) {
+        setState(() => selectedChild = childrenList.first);
+        await _loadReport(childrenList.first.childId);
+      }
     } catch (e) {
-      setState(() => errorMessage = 'Error loading children: $e');
-    } finally {
-      setState(() => isLoading = false);
+      setState(() {
+        errorMessage = 'Error initializing: $e';
+        isLoading = false;
+      });
     }
   }
 
-  Future<void> _loadReport() async {
-    if (selectedChildId == null) return;
+  Future<void> _loadChildren() async {
+    try {
+      if (userId == null) return;
+      
+      final children = await ChildService.getChildren(userId: userId!);
+      setState(() {
+        childrenList = children;
+        errorMessage = null;
+      });
+      
+      debugPrint('✅ Loaded ${children.length} children');
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Error loading children: $e';
+      });
+      debugPrint('❌ Error loading children: $e');
+    }
+  }
 
+  Future<void> _loadReport(String childId) async {
     setState(() {
       isLoading = true;
-      errorMessage = '';
+      errorMessage = null;
     });
 
     try {
-      final report = await ReportService.getChildReport(selectedChildId!);
+      // Find child info
+      final child = childrenList.firstWhere((c) => c.childId == childId);
+      
+      // Fetch report with child context
+      final report = await ReportService.getChildReport(
+        childId,
+        childName: child.name,
+        childAge: child.age,
+      );
+
       setState(() {
         currentReport = report;
+        isLoading = false;
+        
         if (report == null) {
-          errorMessage = 'No data available for this child yet.';
+          errorMessage = 'No assessments available for ${child.name}. Complete a handwriting assessment to generate reports.';
         }
       });
     } catch (e) {
-      setState(() => errorMessage = 'Error loading report: $e');
-    } finally {
-      setState(() => isLoading = false);
+      setState(() {
+        errorMessage = 'Error loading report: $e';
+        isLoading = false;
+      });
+      debugPrint('❌ Error loading report: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Progress Reports'),
-        elevation: 0,
+        title: const Text('Child Reports'),
+        backgroundColor: theme.primaryColor,
       ),
       body: SingleChildScrollView(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Child Selection Dropdown
-            Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Text(
-                    'Select Child:',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButton<String>(
-                      value: selectedChildId,
-                      isExpanded: true,
-                      hint: const Text('Choose a child'),
-                      items: childrenList.map((child) {
-                        return DropdownMenuItem<String>(
-                          value: child.childId,
-                          child: Text(child.name),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedChildId = value);
-                          _loadReport();
+            // Child Selection Dropdown - only show if not from children page
+            if (childrenList.isNotEmpty && widget.childIdContext == null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(
+                  children: [
+                    const Text(
+                      'Select Child:',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButton<Child>(
+                        value: selectedChild,
+                        isExpanded: true,
+                        items: childrenList.map((child) {
+                          return DropdownMenuItem<Child>(
+                            value: child,
+                            child: Text(child.name),
+                          );
+                        }).toList(),
+                      onChanged: (child) {
+                        if (child != null && child.childId != selectedChild?.childId) {
+                          setState(() => selectedChild = child);
+                          _loadReport(child.childId);
                         }
                       },
                     ),
@@ -111,267 +164,291 @@ class _ReportsSectionState extends State<ReportsSection> {
                 ],
               ),
             ),
-            // Loading or Error State
-            if (isLoading)
-              Container(
+
+          // Loading State
+          if (isLoading)
+            Center(
+              child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: const CircularProgressIndicator(),
-              )
-            else if (errorMessage.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  errorMessage,
-                  style: const TextStyle(color: Colors.red, fontSize: 14),
-                  textAlign: TextAlign.center,
-                ),
-              )
-            else if (currentReport != null)
-              _buildReportContent(currentReport!)
-            else
-              Container(
-                padding: const EdgeInsets.all(32),
-                child: const Text(
-                  'No report data available',
-                  textAlign: TextAlign.center,
+                child: Column(
+                  children: const [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Loading report...'),
+                  ],
                 ),
               ),
+            )
+          // Error State
+          else if (errorMessage != null && currentReport == null)
+            _buildEmptyState(context, theme)
+          // Report Content
+          else if (currentReport != null)
+            _buildReportContent(context, theme, currentReport!)
+          // No children
+          else if (childrenList.isEmpty && !isLoading)
+            _buildNoChildrenState(context, theme),
+        ],
+      ),
+    ),
+  );
+}
+
+  Widget _buildEmptyState(BuildContext context, ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.assessment_outlined,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Assessments Available',
+              style: theme.textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage ?? 'Complete a handwriting assessment to generate reports',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReportContent(ChildReport report) {
-    final summary = ReportService.getPerformanceSummary(report);
-    final trend = ReportService.getProgressTrend(report);
-
-    return Column(
-      children: [
-        // Summary Cards
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.grey.shade100,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Performance Summary',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  Widget _buildNoChildrenState(BuildContext context, ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.people_outline,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No Children Found',
+              style: theme.textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add a child profile from the Children section to view reports',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: Colors.grey.shade600,
               ),
-              const SizedBox(height: 16),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 1.5,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                children: [
-                  _buildSummaryCard(
-                    'Overall Score',
-                    '${summary['overall_average'].toStringAsFixed(1)}%',
-                    Colors.blue,
-                  ),
-                  _buildSummaryCard(
-                    'Sessions',
-                    '${summary['total_sessions']}',
-                    Colors.green,
-                  ),
-                  _buildSummaryCard(
-                    'Completion',
-                    '${summary['completion_percentage'].toStringAsFixed(0)}%',
-                    Colors.orange,
-                  ),
-                  _buildSummaryCard(
-                    'Letters Practiced',
-                    '${summary['letters_practiced']}/26',
-                    Colors.purple,
-                  ),
-                ],
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
+      ),
+    );
+  }
 
-        // Overall Score Over Time
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Overall Score Trend',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 300,
-                child: _buildLineChart(
-                  trend,
-                  'overall',
-                  Colors.blue,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+  Widget _buildReportContent(BuildContext context, ThemeData theme, ChildReport report) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header with child info
+          _buildHeader(theme, report),
+          const SizedBox(height: 24),
 
-        // Metric Breakdown (Pressure, Spacing, Formation)
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Metric Breakdown',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 250,
-                child: _buildBarChart(report),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+          // Assessment Components & Scores
+          _buildAssessmentSection(theme, report),
+          const SizedBox(height: 24),
 
-        // Pressure Score Trend
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Pressure Consistency',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 250,
-                child: _buildLineChart(
-                  trend,
-                  'pressure',
-                  Colors.red,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+          // Visual Analytics
+          if (report.analysisScores.isNotEmpty) ...[
+            _buildVisualAnalyticsSection(theme, report),
+            const SizedBox(height: 24),
+          ],
 
-        // Top Performing Letters
-        Container(
-          padding: const EdgeInsets.all(16),
-          color: Colors.green.shade50,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '⭐ Top Performing Letters',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: (summary['top_letters'] as List<String>).map((letter) {
-                  return Chip(
-                    label: Text(letter),
-                    backgroundColor: Colors.green,
-                    labelStyle: const TextStyle(color: Colors.white),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
+          // Recommendations
+          _buildRecommendationsSection(theme, report),
+          const SizedBox(height: 24),
 
-        // Letters Needing Help
-        if ((summary['letters_needing_help'] as List<String>).isNotEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.orange.shade50,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '📚 Letters Needing Practice',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  children: (summary['letters_needing_help'] as List<String>)
-                      .map((letter) {
-                    return Chip(
-                      label: Text(letter),
-                      backgroundColor: Colors.orange,
-                      labelStyle: const TextStyle(color: Colors.white),
-                    );
-                  }).toList(),
-                ),
-              ],
+          // Next Session Goal
+          _buildNextSessionGoal(theme, report),
+          const SizedBox(height: 24),
+
+          // (Export buttons removed)
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader(ThemeData theme, ChildReport report) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 35,
+            backgroundColor: Colors.orange,
+            child: Text(
+              report.childName.isNotEmpty ? report.childName[0].toUpperCase() : '?',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-        const SizedBox(height: 16),
-
-        // Export and Share Buttons
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: Row(
+          const SizedBox(width: 16),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _exportReport(report),
-                  icon: const Icon(Icons.download),
-                  label: const Text('Export PDF'),
-                ),
+              Text(
+                report.childName,
+                style: theme.textTheme.headlineSmall,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _emailReport(report),
-                  icon: const Icon(Icons.email),
-                  label: const Text('Email'),
-                ),
+              Text(
+                'Age ${report.age ?? 'N/A'}',
+                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
+              ),
+              Text(
+                'Assessment Date: ${_formatDate(report.generatedAt)}',
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade600),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssessmentSection(ThemeData theme, ChildReport report) {
+    final components = _getAssessmentComponents(report);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ASSESSMENT COMPONENTS & SCORES',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text('Component')),
+              DataColumn(label: Text('Score (0-2)')),
+              DataColumn(label: Text('Notes')),
+            ],
+            rows: components.map((comp) {
+              return DataRow(
+                cells: [
+                  DataCell(Text(comp['name'] as String)),
+                  DataCell(
+                    Text(
+                      comp['score'].toString(),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: comp['isAssessed'] == true
+                            ? Colors.orange.shade700
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    SizedBox(
+                      width: 200,
+                      child: Text(
+                        comp['notes'] as String,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, Color color) {
+  Widget _buildVisualAnalyticsSection(ThemeData theme, ChildReport report) {
+    final trend = ReportService.getProgressTrend(report);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'VISUAL ANALYTICS',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _buildChartCard(
+                'Pressure Graph',
+                SizedBox(
+                  height: 150,
+                  child: _buildLineChart(trend, 'pressure', Colors.orange),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildChartCard(
+                'Progress Chart',
+                SizedBox(
+                  height: 150,
+                  child: _buildLineChart(trend, 'overall', Colors.green),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChartCard(String title, Widget chart) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color, width: 2),
-      ),
       padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.center,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
+          chart,
         ],
       ),
     );
@@ -383,7 +460,9 @@ class _ReportsSectionState extends State<ReportsSection> {
     Color color,
   ) {
     if (trend.isEmpty) {
-      return const Center(child: Text('No data available'));
+      return Center(
+        child: Text('No data available', style: TextStyle(color: Colors.grey.shade400)),
+      );
     }
 
     final spots = <FlSpot>[];
@@ -397,27 +476,10 @@ class _ReportsSectionState extends State<ReportsSection> {
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: 20,
+          horizontalInterval: 25,
         ),
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Text('${value.toInt()}');
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Text('${value.toInt()}%');
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: true),
+        titlesData: const FlTitlesData(show: false),
+        borderData: FlBorderData(show: false),
         minY: 0,
         maxY: 100,
         lineBarsData: [
@@ -425,144 +487,190 @@ class _ReportsSectionState extends State<ReportsSection> {
             spots: spots,
             isCurved: true,
             color: color,
-            barWidth: 3,
-            isStrokeCapRound: true,
+            barWidth: 2,
             dotData: FlDotData(show: true),
+            belowBarData: BarAreaData(show: true, color: color.withValues(alpha: 0.1)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBarChart(ChildReport report) {
-    return BarChart(
-      BarChartData(
-        barGroups: [
-          BarChartGroupData(
-            x: 0,
-            barRods: [
-              BarChartRodData(
-                toY: report.averagePressure,
-                color: Colors.red,
-                width: 16,
-              ),
-            ],
-          ),
-          BarChartGroupData(
-            x: 1,
-            barRods: [
-              BarChartRodData(
-                toY: report.averageSpacing,
-                color: Colors.blue,
-                width: 16,
-              ),
-            ],
-          ),
-          BarChartGroupData(
-            x: 2,
-            barRods: [
-              BarChartRodData(
-                toY: report.averageFormation,
-                color: Colors.green,
-                width: 16,
-              ),
-            ],
-          ),
-        ],
-        titlesData: FlTitlesData(
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                const titles = ['Pressure', 'Spacing', 'Formation'];
-                final idx = value.toInt();
-                return Text(titles[idx]);
-              },
-            ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Text('${value.toInt()}%');
-              },
-            ),
+  Widget _buildRecommendationsSection(ThemeData theme, ChildReport report) {
+    final recommendations = _getRecommendations(report);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'THERAPIST RECOMMENDATIONS',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1,
           ),
         ),
-        minY: 0,
-        maxY: 100,
-      ),
-    );
-  }
-
-  Future<void> _exportReport(ChildReport report) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Exporting PDF...')),
-    );
-
-    final success = await ReportService.exportReportAsPdf(report.childId);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'PDF exported successfully!' : 'Export failed'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _emailReport(ChildReport report) async {
-    showDialog(
-      context: context,
-      builder: (ctx) => _buildEmailDialog(report),
-    );
-  }
-
-  Widget _buildEmailDialog(ChildReport report) {
-    final emailController = TextEditingController();
-
-    return AlertDialog(
-      title: const Text('Email Report'),
-      content: TextField(
-        controller: emailController,
-        keyboardType: TextInputType.emailAddress,
-        decoration: InputDecoration(
-          hintText: 'Parent email',
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Sending email...')),
-            );
-
-            final success = await ReportService.emailReportToParent(
-              report.childId,
-              emailController.text,
-            );
-
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(success ? 'Email sent successfully!' : 'Failed to send email'),
-                  backgroundColor: success ? Colors.green : Colors.red,
-                ),
-              );
-            }
-          },
-          child: const Text('Send'),
-        ),
+        const SizedBox(height: 12),
+        ...recommendations.map((rec) => _buildRecommendationItem(rec)),
       ],
     );
+  }
+
+  Widget _buildRecommendationItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 13, height: 1.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNextSessionGoal(ThemeData theme, ChildReport report) {
+    final goal = _getNextSessionGoal(report);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border.all(color: Colors.blue.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'NEXT SESSION GOAL',
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            goal,
+            style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Export buttons removed as per UX request.
+
+  List<Map<String, dynamic>> _getAssessmentComponents(ChildReport report) {
+    final scores = report.analysisScores;
+    final hasData = scores.isNotEmpty;
+
+    // If no assessment data is available, show 'Take up a test' as the score
+    const noDataLabel = 'Take up a test';
+
+    List<Map<String, dynamic>> components = [
+      {
+        'name': 'Pressure',
+        'score': report.pressureRank.toString(),
+        'notes': 'Grip and pressure consistency',
+        'isAssessed': true,
+      },
+      {
+        'name': 'Letter Formation',
+        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation).toString() : '0',
+        'notes': 'Accuracy of letter shapes',
+        'isAssessed': hasData,
+      },
+      {
+        'name': 'Spacing',
+        'score': report.averageSpacing.toString(),
+        'notes': 'Letter and word spacing',
+        'isAssessed': true,
+      },
+      {
+        'name': 'Accuracy',
+        'score': report.accuracyRank.toString(),
+        'notes': 'Overall writing accuracy',
+        'isAssessed': hasData,
+      },
+      // New additional rows requested: Pre writing shapes and Sentence writing (word formation)
+      {
+        'name': 'Pre writing Shapes',
+        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation) : noDataLabel,
+        'notes': 'Pre-writing shape recognition and tracing',
+        'isAssessed': hasData,
+      },
+      {
+        'name': 'Sentence Writing - Word Formation',
+        'score': hasData ? ReportService.convertPercentageToScale(report.overallAverage) : noDataLabel,
+        'notes': 'Word formation and sentence-level structure',
+        'isAssessed': hasData,
+      },
+    ];
+
+    return components;
+  }
+
+  List<String> _getRecommendations(ChildReport report) {
+    final scores = report.analysisScores;
+    if (scores.isEmpty) return [];
+
+    List<String> recommendations = [];
+
+    if (report.pressureRank < 1) {
+      recommendations.add('Focus on pressure control exercises');
+    }
+    if (report.averageFormation < 50) {
+      recommendations.add('Practice letter formation drills');
+    }
+    if (report.averageSpacing < 1) {
+      recommendations.add('Work on spacing consistency');
+    }
+    if (report.accuracyRank < 1) {
+      recommendations.add('Daily 10-minute practice on lined sheets');
+    }
+
+    // Default recommendations
+    if (recommendations.isEmpty) {
+      recommendations = [
+        'Continue daily handwriting practice',
+        'Focus on letter formation accuracy',
+        'Practice spacing and alignment',
+        'Build writing endurance gradually',
+      ];
+    }
+
+    return recommendations;
+  }
+
+  String _getNextSessionGoal(ChildReport report) {
+    final scores = report.analysisScores;
+    if (scores.isEmpty) return 'Complete your first handwriting assessment';
+
+    if (report.averageFormation < 60) {
+      return 'Improve letter formation consistency and accuracy';
+    } else if (report.averageSpacing < 2) {
+      return 'Focus on maintaining consistent spacing between letters';
+    } else if (report.pressureRank < 2) {
+      return 'Work on developing consistent pressure control';
+    } else if (report.accuracyRank < 2) {
+      return 'Improve overall accuracy in handwriting';
+    }
+
+    return 'Continue improving overall handwriting quality and consistency';
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day} ${_getMonthName(date.month)} ${date.year}';
+  }
+
+  String _getMonthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
   }
 }

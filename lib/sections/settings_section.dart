@@ -3,6 +3,8 @@ import '../widgets/settings_list_tile.dart';
 import '../widgets/theme_toggle.dart';
 import '../utils/theme_service.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class SettingsSection extends StatefulWidget {
   const SettingsSection({super.key});
@@ -20,29 +22,25 @@ class _SettingsSectionState extends State<SettingsSection> {
   @override
   void initState() {
     super.initState();
-    // TODO: ADD BACKEND API - Load user profile
-    // _loadUserProfile();
+    // Load user profile from SharedPreferences (local store)
+    _loadUserProfile();
   }
 
   // TODO: ADD BACKEND API - Load user profile from backend
-  // Future<void> _loadUserProfile() async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('YOUR_API_URL/api/user/profile'),
-  //       headers: {'Authorization': 'Bearer YOUR_TOKEN'},
-  //     );
-  //     if (response.statusCode == 200) {
-  //       final data = json.decode(response.body);
-  //       setState(() {
-  //         userName = data['name'] ?? 'User';
-  //         userEmail = data['email'] ?? 'user@email.com';
-  //         userAvatar = data['avatar'] ?? '';
-  //       });
-  //     }
-  //   } catch (e) {
-  //     print('Error loading user profile: $e');
-  //   }
-  // }
+  Future<void> _loadUserProfile() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final storedName = prefs.getString('user_name');
+      final storedEmail = prefs.getString('user_email');
+      setState(() {
+        if (storedName != null && storedName.isNotEmpty) userName = storedName;
+        if (storedEmail != null && storedEmail.isNotEmpty) userEmail = storedEmail;
+      });
+    } catch (e) {
+      // ignore errors and keep defaults
+      print('Error loading profile from prefs: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +63,7 @@ class _SettingsSectionState extends State<SettingsSection> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF6B35).withOpacity(0.3),
+                  color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -222,39 +220,119 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _editProfile() {
-    // TODO: ADD BACKEND API - Navigate to edit profile
+    final formKey = GlobalKey<FormState>();
+    String newName = userName;
+    String newEmail = userEmail;
+    String newPassword = '';
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Profile'),
-        content: const Text('Edit profile feature coming soon!'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                initialValue: userName,
+                decoration: const InputDecoration(labelText: 'Username'),
+                onChanged: (v) => newName = v.trim(),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter a name' : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                initialValue: userEmail,
+                decoration: const InputDecoration(labelText: 'Email'),
+                keyboardType: TextInputType.emailAddress,
+                onChanged: (v) => newEmail = v.trim(),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Enter an email';
+                  if (!v.contains('@')) return 'Enter a valid email';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                onChanged: (v) => newPassword = v,
+                validator: (v) => (v == null || v.length < 6) ? 'Minimum 6 characters' : null,
+              ),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState?.validate() ?? false) {
+                try {
+                  // Try to call backend update_profile to persist changes (password will be hashed on server)
+                  final userId = await Config.getUserId();
+
+                  if (userId != null && userId.isNotEmpty) {
+                    final body = {
+                      'user_id': userId,
+                      'name': newName,
+                      'email': newEmail,
+                    };
+                    if (newPassword.isNotEmpty) {
+                      body['password'] = newPassword;
+                    }
+
+                    final resp = await apiCall('PUT', '/auth/update_profile', body: body);
+                    if (resp.statusCode == 200) {
+                      // update local copy of name/email but DO NOT store password locally
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('user_name', newName);
+                      await prefs.setString('user_email', newEmail);
+                      setState(() {
+                        userName = newName;
+                        userEmail = newEmail;
+                      });
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Profile updated')),
+                      );
+                    } else {
+                      final msg = resp.body.isNotEmpty ? resp.body : 'Failed to update profile';
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error updating profile: $msg')),
+                      );
+                    }
+                  } else {
+                    // Not logged in - fallback to local prefs (insecure)
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString('user_name', newName);
+                    await prefs.setString('user_email', newEmail);
+                    await prefs.setString('user_password', newPassword);
+                    setState(() {
+                      userName = newName;
+                      userEmail = newEmail;
+                    });
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Profile updated locally')),
+                    );
+                  }
+                } catch (e) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error saving profile: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
           ),
         ],
       ),
     );
-
-    // TODO: ADD BACKEND API CALL
-    // Future<void> _updateProfile(String name, String email) async {
-    //   try {
-    //     await http.put(
-    //       Uri.parse('YOUR_API_URL/api/user/profile'),
-    //       headers: {
-    //         'Authorization': 'Bearer YOUR_TOKEN',
-    //         'Content-Type': 'application/json',
-    //       },
-    //       body: json.encode({
-    //         'name': name,
-    //         'email': email,
-    //       }),
-    //     );
-    //   } catch (e) {
-    //     print('Error updating profile: $e');
-    //   }
-    // }
   }
 
   void _showLanguageDialog() {

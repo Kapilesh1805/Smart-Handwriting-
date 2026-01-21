@@ -5,8 +5,7 @@ import '../utils/drawing_service.dart';
 class ShapePatternDisplay extends StatelessWidget {
   final ShapeType shapeType;
 
-  const ShapePatternDisplay({Key? key, required this.shapeType})
-      : super(key: key);
+  const ShapePatternDisplay({super.key, required this.shapeType});
 
   @override
   Widget build(BuildContext context) {

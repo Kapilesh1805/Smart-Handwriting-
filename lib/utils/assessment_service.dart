@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/assessment_report.dart';
+import '../config/api_config.dart';
 
 class AssessmentService {
-  static const String _baseUrl = 'http://localhost:5000';
+  // Use config from api_config.dart instead of hardcoding
 
   // Fetch latest assessment report for a child from backend
   static Future<AssessmentReport?> fetchAssessmentReport(String childId, {String? childName, int? age, String? grade}) async {
@@ -12,7 +13,7 @@ class AssessmentService {
       debugPrint('📊 Fetching assessment report for child: $childId');
       
       final response = await http.get(
-        Uri.parse('$_baseUrl/report/child/$childId'),
+        Uri.parse('${Config.apiBaseUrl}/report/child/$childId'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
@@ -33,6 +34,30 @@ class AssessmentService {
         debugPrint('✅ Report loaded with ${reports.length} sessions');
 
         // Convert backend data to AssessmentReport format
+        int formationAsInt(dynamic v) {
+          if (v == null) return 0;
+          if (v is num) return v.toInt();
+          if (v is String) {
+            const Map<String, int> map = {'Poor': 30, 'Average': 60, 'Good': 90};
+            if (map.containsKey(v)) return map[v]!;
+            final parsed = int.tryParse(v);
+            if (parsed != null) return parsed;
+          }
+          return 0;
+        }
+
+        double formationAsDouble(dynamic v) {
+          if (v == null) return 0.0;
+          if (v is num) return v.toDouble();
+          if (v is String) {
+            const Map<String, double> map = {'Poor': 30.0, 'Average': 60.0, 'Good': 90.0};
+            if (map.containsKey(v)) return map[v]!;
+            final parsed = double.tryParse(v);
+            if (parsed != null) return parsed;
+          }
+          return 0.0;
+        }
+
         return AssessmentReport(
           childId: childId,
           childName: childName ?? 'Student',
@@ -55,7 +80,7 @@ class AssessmentService {
             ),
             ComponentScore(
               component: 'Letter Formation',
-              score: (summary['formation_score'] as num?)?.toInt() ?? 0,
+              score: formationAsInt(summary['formation_score']),
               maxScore: 100,
               observation: 'Accuracy of letter formation',
             ),
@@ -70,12 +95,12 @@ class AssessmentService {
             baselineTracking: {
               'Session 1': (summary['pressure_score'] as num?)?.toInt() ?? 0,
               'Session 2': (summary['spacing_score'] as num?)?.toInt() ?? 0,
-              'Session 3': (summary['formation_score'] as num?)?.toInt() ?? 0,
+              'Session 3': formationAsInt(summary['formation_score']),
             },
             progressChart: {
               'Pressure': (summary['pressure_score'] as num?)?.toDouble() ?? 0,
               'Spacing': (summary['spacing_score'] as num?)?.toDouble() ?? 0,
-              'Formation': (summary['formation_score'] as num?)?.toDouble() ?? 0,
+              'Formation': formationAsDouble(summary['formation_score']),
               'Accuracy': (summary['accuracy_score'] as num?)?.toDouble() ?? 0,
             },
           ),
@@ -115,7 +140,7 @@ class AssessmentService {
       debugPrint('📊 Fetching assessment history for child: $childId');
       
       final response = await http.get(
-        Uri.parse('$_baseUrl/report/child/$childId'),
+        Uri.parse('${Config.apiBaseUrl}/report/child/$childId'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
@@ -124,6 +149,18 @@ class AssessmentService {
         final reports = jsonData['data'] as List<dynamic>? ?? [];
 
         debugPrint('✅ Loaded ${reports.length} reports from history');
+
+        int formationAsInt(dynamic v) {
+          if (v == null) return 0;
+          if (v is num) return v.toInt();
+          if (v is String) {
+            const Map<String, int> map = {'Poor': 30, 'Average': 60, 'Good': 90};
+            if (map.containsKey(v)) return map[v]!;
+            final parsed = int.tryParse(v);
+            if (parsed != null) return parsed;
+          }
+          return 0;
+        }
 
         return reports.map((report) {
           final summary = report['summary'] as Map<String, dynamic>? ?? {};
@@ -149,7 +186,7 @@ class AssessmentService {
               ),
               ComponentScore(
                 component: 'Letter Formation',
-                score: (summary['formation_score'] as num?)?.toInt() ?? 0,
+                score: formationAsInt(summary['formation_score']),
                 maxScore: 100,
                 observation: 'Formation accuracy',
               ),

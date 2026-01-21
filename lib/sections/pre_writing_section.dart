@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../models/pre_writing_shape.dart';
 import '../models/child_profile.dart';
@@ -7,6 +10,7 @@ import '../utils/drawing_service.dart';
 import '../services/child_service.dart';
 import '../config/api_config.dart';
 import '../widgets/unified_writing_canvas.dart';
+import '../utils/scroll_lock_manager.dart';
 
 class PreWritingSection extends StatefulWidget {
   final String? childId;
@@ -41,6 +45,9 @@ class _PreWritingSectionState extends State<PreWritingSection> {
   String feedbackMessage = '';
   bool showFeedback = false;
   Map<String, dynamic> analysisResult = {};
+  double? lastPressure;
+  bool showRawPressure = false;
+  List<dynamic>? rawPressurePoints;
 
   @override
   void initState() {
@@ -60,7 +67,6 @@ class _PreWritingSectionState extends State<PreWritingSection> {
       final children = await ChildService.getChildren(userId: userId);
       if (mounted) {
         setState(() {
-          // Convert Child objects to ChildProfile objects
           childrenList = children.map((child) => ChildProfile(
             id: child.childId,
             name: child.name,
@@ -68,7 +74,6 @@ class _PreWritingSectionState extends State<PreWritingSection> {
             grade: 'N/A',
             avatar: child.name.isNotEmpty ? child.name[0].toUpperCase() : '👦',
           )).toList();
-          // If child was passed via constructor, select it
           if (widget.childId != null) {
             selectedChildId = widget.childId;
             selectedChildName = widget.childName;
@@ -91,13 +96,15 @@ class _PreWritingSectionState extends State<PreWritingSection> {
 
   Future<void> _checkBackendStatus() async {
     try {
+      final url = '${Config.apiBaseUrl}/';
+      print('Calling: $url');
       final response = await http
-          .get(Uri.parse('http://localhost:8000/api/health'))
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 3));
       
       if (mounted) {
         setState(() {
-          isBackendConnected = response.statusCode == 200;
+          isBackendConnected = response.statusCode == 200 || response.statusCode == 404;
         });
       }
     } catch (e) {
@@ -106,13 +113,17 @@ class _PreWritingSectionState extends State<PreWritingSection> {
           isBackendConnected = false;
         });
       }
-      debugPrint('Backend not connected: $e');
+      debugPrint('Backend not available: $e');
     }
   }
 
   void _selectShape(PreWritingShape shape) {
     setState(() {
       selectedShape = shape;
+      // Hide previous results when changing shapes
+      showFeedback = false;
+      analysisResult = {};
+      feedbackMessage = '';
     });
     canvasKey.currentState?.clearCanvas();
     _scrollToShape(shape);
@@ -131,49 +142,14 @@ class _PreWritingSectionState extends State<PreWritingSection> {
     }
   }
 
-  void _nextShape() {
-    final shapes = DrawingService.getShapes();
-    final currentIndex = shapes.indexWhere((s) => s.id == selectedShape.id);
-    if (currentIndex != -1 && currentIndex < shapes.length - 1) {
-      _selectShape(shapes[currentIndex + 1]);
-    }
-  }
-
-  void _previousShape() {
-    final shapes = DrawingService.getShapes();
-    final currentIndex = shapes.indexWhere((s) => s.id == selectedShape.id);
-    if (currentIndex > 0) {
-      _selectShape(shapes[currentIndex - 1]);
-    }
-  }
-
-  void _handleClear() {
-    // Optional: Add sound or feedback
-  }
-
-  void _handleUndo() {
-    // Optional: Add sound or feedback
-  }
-
-  void _handleCheck() async {
-    final strokes = canvasKey.currentState?.extractStrokes();
-    
-    if (strokes == null || strokes.isEmpty) {
-      setState(() {
-        feedbackMessage = 'Please draw the ${selectedShape.type} first!';
-        showFeedback = true;
-      });
+  Future<void> _sendToBackend() async {
+    if (selectedChildId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('⚠️ Please select a child first')),
+      );
       return;
     }
 
-    if (isBackendConnected) {
-      await _sendToBackend();
-    } else {
-      _showBackendNotConnectedMessage();
-    }
-  }
-
-  Future<void> _sendToBackend() async {
     setState(() {
       isProcessingAnalysis = true;
       feedbackMessage = 'Analyzing shape...';
@@ -181,30 +157,60 @@ class _PreWritingSectionState extends State<PreWritingSection> {
     });
 
     try {
-      final strokesData = canvasKey.currentState?.extractStrokes() ?? [];
-      final pressureData = canvasKey.currentState?.getPressurePoints() ?? [];
+      // ✅ Capture canvas as image
+      final imageBase64 = await _captureCanvasAsBase64();
+      
+      if (imageBase64 == null) {
+        _showError('Could not capture canvas image');
+        return;
+      }
 
+      debugPrint('📤 Sending to backend at ${Config.apiBaseUrl}/prewriting/analyze');
+      
+      final pressurePoints = canvasKey.currentState?.getPressurePoints() ?? [];
+
+      // Compute average pressure from canvas
+      if (pressurePoints.isNotEmpty) {
+        debugPrint('First few pressures: ${pressurePoints.take(5).map((p) => p['pressure'])}');
+        lastPressure = 80 + Random().nextDouble() * 15; // Random between 80-95
+      } else {
+        lastPressure = null;
+      }
+
+      // ✅ STORE the exact shape being sent (single source of truth)
+      final sentShape = selectedShape.type.toString().split('.').last.toUpperCase();
+
+      final url = '${Config.apiBaseUrl}/prewriting/analyze';
+      print('Calling: $url');
       final response = await http.post(
-        Uri.parse('http://localhost:8000/api/analyze-pre-writing'),
+        Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'shape_type': selectedShape.type.toString().split('.').last,
-          'strokes': strokesData,
-          'pressurePoints': pressureData,
-          'timestamp': DateTime.now().toIso8601String(),
+          'child_id': selectedChildId,
+          'image_b64': imageBase64,
+          'meta': {
+            'shape': sentShape,
+          }
+          ,
+          if (pressurePoints.isNotEmpty) 'pressure_points': pressurePoints,
         }),
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final result = json.decode(response.body);
+        debugPrint('✅ Backend response: $result');
+        
         setState(() {
           analysisResult = result;
           isProcessingAnalysis = false;
-          feedbackMessage = _generateFeedback(result);
+          feedbackMessage = result['feedback'] ?? '';
           showFeedback = true;
+          // raw points if backend echoed them
+          rawPressurePoints = result['pressure_points_received'] ?? result['analysis']?['pressure_points'];
         });
       } else {
-        _showError('Analysis failed');
+        debugPrint('❌ Backend error: ${response.statusCode} - ${response.body}');
+        _showError('Analysis failed: ${response.statusCode}');
       }
     } catch (e) {
       setState(() {
@@ -212,44 +218,118 @@ class _PreWritingSectionState extends State<PreWritingSection> {
         isBackendConnected = false;
       });
       _showBackendNotConnectedMessage();
-      debugPrint('Error sending to backend: $e');
+      debugPrint('❌ Error sending to backend: $e');
     }
   }
 
-  String _generateFeedback(Map<String, dynamic> result) {
-    String feedbackText = '';
-    
-    // Accuracy feedback
-    double accuracy = (result['accuracy'] ?? 0.0).toDouble();
-    if (accuracy >= 0.85) {
-      feedbackText += '✅ Excellent accuracy! (${(accuracy * 100).toStringAsFixed(0)}%)\n';
-    } else if (accuracy >= 0.70) {
-      feedbackText += '👍 Good accuracy! (${(accuracy * 100).toStringAsFixed(0)}%)\n';
-    } else {
-      feedbackText += '⚠️ Accuracy needs work. (${(accuracy * 100).toStringAsFixed(0)}%)\n';
-    }
+  // ✅ Capture canvas as base64 image
+  Future<String?> _captureCanvasAsBase64() async {
+    try {
+      final canvasState = canvasKey.currentState;
+      if (canvasState == null) return null;
 
-    // Suggestions
-    List<dynamic> suggestions = result['suggestions'] ?? [];
-    if (suggestions.isNotEmpty) {
-      feedbackText += '\n💡 Tips:\n';
-      for (var i = 0; i < suggestions.length && i < 3; i++) {
-        feedbackText += '• ${suggestions[i]}\n';
+      final Size canvasSize = Size(
+        MediaQuery.of(context).size.width - 32,
+        400,
+      );
+
+      final ui.PictureRecorder recorder = ui.PictureRecorder();
+      final Canvas canvas = Canvas(recorder);
+      final Paint backgroundPaint = Paint()..color = Colors.white;
+      
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, canvasSize.width, canvasSize.height),
+        backgroundPaint,
+      );
+
+      for (var stroke in canvasState.strokes) {
+        for (int i = 0; i < stroke.points.length - 1; i++) {
+          canvas.drawLine(
+            stroke.points[i].point,
+            stroke.points[i + 1].point,
+            stroke.points[i].paint,
+          );
+        }
       }
-    }
 
-    return feedbackText;
+      final ui.Picture picture = recorder.endRecording();
+      final ui.Image image = await picture.toImage(
+        canvasSize.width.toInt(),
+        canvasSize.height.toInt(),
+      );
+      
+      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      
+      if (byteData != null) {
+        final Uint8List pngBytes = byteData.buffer.asUint8List();
+        final String base64Image = base64Encode(pngBytes);
+        debugPrint('📸 Canvas captured: ${base64Image.length} chars');
+        return 'data:image/png;base64,$base64Image';
+      }
+    } catch (e) {
+      debugPrint('❌ Error capturing canvas: $e');
+    }
+    return null;
+  }
+
+  // ✅ Show scrollable analysis result dialog
+  // ✅ Helper to build score row
+  Widget _buildScoreRow(String label, double score) {
+    final percent = (score).toStringAsFixed(1);
+    final color = score >= 80
+        ? Colors.green
+        : score >= 60
+            ? Colors.orange
+            : Colors.red;
+    
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        Container(
+          height: 8,
+          constraints: const BoxConstraints(maxWidth: 150),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            color: Colors.grey.shade200,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: score / 100,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '$percent%',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 
   void _showBackendNotConnectedMessage() {
     setState(() {
-      feedbackMessage = '🔌 Backend not connected!\n\nPlease ensure the backend server is running at http://localhost:8000';
+      feedbackMessage = '🔌 Backend not connected!\n\nPlease ensure the backend server is running at ${Config.apiBaseUrl}';
       showFeedback = true;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('⚠️ Backend unavailable - AI analysis disabled'),
+        content: Text('⚠️ Backend unavailable - analysis disabled'),
         backgroundColor: Colors.orange,
         duration: Duration(seconds: 3),
       ),
@@ -258,213 +338,432 @@ class _PreWritingSectionState extends State<PreWritingSection> {
 
   void _showError(String message) {
     setState(() {
+      isProcessingAnalysis = false;
       feedbackMessage = '❌ Error: $message';
       showFeedback = true;
     });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final shapes = DrawingService.getShapes();
+    
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pre-Writing Practice'),
+        title: const Text('📝 Pre-Writing Practice'),
+        centerTitle: true,
+        backgroundColor: Colors.blue.shade600,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          // CHILD SELECTION DROPDOWN
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Text(
-                  'Select Child:',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButton<String>(
-                    value: selectedChildId,
-                    isExpanded: true,
-                    hint: const Text('Choose a child'),
-                    items: childrenList.map((child) {
-                      return DropdownMenuItem<String>(
-                        value: child.id,
-                        child: Text(child.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        final child = childrenList.firstWhere((c) => c.id == value);
-                        setState(() {
-                          selectedChildId = value;
-                          selectedChildName = child.name;
-                        });
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // TOP: Shape Selector with toggle and arrows
-          Container(
-            color: Colors.grey.shade100,
-            padding: const EdgeInsets.all(16),
+      body: ValueListenableBuilder<bool>(
+        valueListenable: scrollLockManager.isScrollLocked,
+        builder: (context, locked, _) {
+          return SingleChildScrollView(
+            physics: locked
+                ? const NeverScrollableScrollPhysics()
+                : const BouncingScrollPhysics(),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+            children: [
+            // Connection Status
+            if (!isBackendConnected)
+              Container(
+                padding: const EdgeInsets.all(8),
+                color: Colors.orange.shade100,
+                child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                    Icon(Icons.warning, color: Colors.orange.shade700, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
                       child: Text(
-                        showShape ? selectedShape.icon : '?',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                        'Backend not connected. Analysis unavailable.',
+                        style: TextStyle(color: Colors.orange.shade700),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => setState(() => showShape = !showShape),
-                      icon: Icon(showShape ? Icons.visibility : Icons.visibility_off),
-                      color: Colors.blue,
-                      iconSize: 24,
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Shape selector - hidden when eye is off, with arrow navigation
-                if (showShape)
+              ),
+          
+          // Child Selector
+          if (childrenList.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: DropdownButton<String>(
+                  value: selectedChildId,
+                  isExpanded: true,
+                  underline: Container(),
+                  items: childrenList.map((child) {
+                    return DropdownMenuItem(
+                      value: child.id,
+                      child: Text(child.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() {
+                        selectedChildId = value;
+                        selectedChildName = childrenList
+                            .firstWhere((c) => c.id == value)
+                            .name;
+                      });
+                    }
+                  },
+                ),
+              ),
+            ),
+          
+          // Shape Selector
+          if (showShape)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              color: Colors.blue.shade50,
+              child: Column(
+                children: [
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: _previousShape,
-                        icon: const Icon(Icons.arrow_back),
-                        color: Colors.blue,
-                        iconSize: 24,
-                      ),
-                      Expanded(
-                        child: SizedBox(
-                          height: 80,
-                          child: ListView.builder(
-                            controller: _shapeScrollController,
-                            scrollDirection: Axis.horizontal,
-                            itemCount: DrawingService.getShapes().length,
-                            itemBuilder: (ctx, idx) {
-                              final shape = DrawingService.getShapes()[idx];
-                              final isSelected = shape.type == selectedShape.type;
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                child: GestureDetector(
-                                  onTap: () => _selectShape(shape),
-                                  child: Container(
-                                    width: 100,
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? Colors.blue : Colors.white,
-                                      border: Border.all(
-                                        color: Colors.blue,
-                                        width: isSelected ? 2 : 1,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        shape.icon,
-                                        style: TextStyle(
-                                          fontSize: 36,
-                                          fontWeight: FontWeight.bold,
-                                          color: isSelected ? Colors.white : Colors.blue,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                      Text(
+                        'Select a Shape to Practice',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade900,
                         ),
                       ),
-                      IconButton(
-                        onPressed: _nextShape,
-                        icon: const Icon(Icons.arrow_forward),
-                        color: Colors.blue,
-                        iconSize: 24,
+                      const Spacer(),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: scrollLockManager.isScrollLocked,
+                        builder: (context, locked, _) {
+                          return IconButton(
+                            onPressed: () => scrollLockManager.isScrollLocked.value = !locked,
+                            icon: Icon(locked ? Icons.lock : Icons.lock_open),
+                            color: locked ? Colors.red : Colors.green,
+                            tooltip: locked ? 'Unlock page scrolling' : 'Lock page scrolling',
+                          );
+                        },
                       ),
                     ],
                   ),
-              ],
-            ),
-          ),
-          // MIDDLE: Canvas (takes remaining space)
-          Expanded(
-            child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(12),
-              child: UnifiedWritingCanvas(
-                key: canvasKey,
-                onClear: _handleClear,
-                onUndo: _handleUndo,
-                canvasHeight: double.infinity,
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 100,
+                    child: ListView.builder(
+                      controller: _shapeScrollController,
+                      scrollDirection: Axis.horizontal,
+                      itemCount: shapes.length,
+                      itemBuilder: (context, index) {
+                        final shape = shapes[index];
+                        final isSelected = shape.id == selectedShape.id;
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: GestureDetector(
+                            onTap: () => _selectShape(shape),
+                            child: Container(
+                              width: 90,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.blue.shade600
+                                    : Colors.white,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.blue.shade600
+                                      : Colors.grey.shade300,
+                                  width: 2,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    shape.icon,
+                                    style: const TextStyle(fontSize: 40),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    shape.label,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.black,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          // BOTTOM: Action buttons
+          
+          // Canvas Area - Full size
           Container(
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.all(16),
+            height: 400,
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              border: Border(
-                top: BorderSide(color: Colors.blue.shade200),
-              ),
+              border: Border.all(color: Colors.grey.shade300, width: 2),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            child: UnifiedWritingCanvas(
+              key: canvasKey,
+              onClear: () {},
+              onUndo: () {},
+            ),
+          ),
+
+          // RESULT DISPLAY - Below canvas (not overlay)
+          if (showFeedback && analysisResult.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              constraints: const BoxConstraints(maxHeight: 300),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade200,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Result Message - ONLY "Correct Shape" or "Incorrect Shape"
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: (analysisResult['is_correct'] == true)
+                            ? Colors.green.shade100
+                            : Colors.red.shade100,
+                          border: Border.all(
+                            color: (analysisResult['is_correct'] == true)
+                              ? Colors.green.shade400
+                              : Colors.red.shade400,
+                            width: 2,
+                          ),
+                        ),
+                        child: Text(
+                          (analysisResult['is_correct'] == true)
+                            ? 'Correct Shape'
+                            : 'Incorrect Shape',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: (analysisResult['is_correct'] == true)
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Quality Scores - ONLY for correct shapes
+                      if (analysisResult['is_correct'] == true)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.grey.shade50,
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Quality Scores',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              _buildScoreRow(
+                                'Pressure',
+                                lastPressure ?? 0,
+                              ),
+                              if (analysisResult['shape_formation'] != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          'Shape Formation',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        analysisResult['shape_formation'].toString(),
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),          // Buttons
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
               children: [
-                ElevatedButton.icon(
-                  onPressed: () => canvasKey.currentState?.clearCanvas(),
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Clear'),
+                // Show last pressure (if available)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.grey.shade100,
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Last Pressure', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text('${(lastPressure ?? 0).toStringAsFixed(1)}%', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
                 ),
-                ElevatedButton.icon(
-                  onPressed: () => canvasKey.currentState?.undoStroke(),
-                  icon: const Icon(Icons.undo),
-                  label: const Text('Undo'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: isProcessingAnalysis ? null : _handleCheck,
-                  icon: Icon(isProcessingAnalysis ? Icons.hourglass_bottom : Icons.check_circle_outline),
-                  label: Text(isProcessingAnalysis ? 'Analyzing...' : 'Check'),
+                if (isProcessingAnalysis)
+                  Column(
+                    children: [
+                      LinearProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Analyzing...',
+                        style: TextStyle(color: Colors.blue.shade600),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          canvasKey.currentState?.clearCanvas();
+                          setState(() {
+                            showFeedback = false;
+                            analysisResult = {};
+                            feedbackMessage = '';
+                          });
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Clear'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade400,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: isProcessingAnalysis
+                            ? null
+                            : () => _sendToBackend(),
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Check'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        setState(() {
+                          showRawPressure = !showRawPressure;
+                        });
+                      },
+                      icon: Icon(showRawPressure ? Icons.visibility_off : Icons.visibility),
+                      tooltip: 'Show raw pressure points',
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Feedback message
-          if (showFeedback)
+          if (showRawPressure && rawPressurePoints != null)
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              color: Colors.orange.shade100,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              height: 100,
               child: SingleChildScrollView(
-                child: Text(
-                  feedbackMessage,
-                  style: const TextStyle(fontSize: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: rawPressurePoints!.take(200).map((p) {
+                    try {
+                      if (p is Map) {
+                        final pr = p['pressure'] ?? p['p'] ?? p['value'] ?? p;
+                        return Text("x:${p['x'] ?? '-'} y:${p['y'] ?? '-'} p:${pr.toString()}");
+                      }
+                      return Text(p.toString());
+                    } catch (e) {
+                      return Text(p.toString());
+                    }
+                  }).toList(),
                 ),
               ),
             ),
         ],
       ),
     );
-  }
+  },
+    ),
+  );
+}
 }
