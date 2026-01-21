@@ -15,7 +15,7 @@ report_bp = Blueprint("report_bp", __name__, url_prefix="/report")
 
 
 # --------------------------------------------------
-# GET: Fetch all reports for a child (JSON)
+# GET: Fetch aggregated report for a child (JSON)
 # --------------------------------------------------
 @report_bp.route("/child/<child_id>", methods=["GET"])
 def get_child_reports(child_id):
@@ -27,10 +27,53 @@ def get_child_reports(child_id):
             )
         )
 
+        if not reports:
+            return jsonify({
+                "msg": "no_reports_found",
+                "pressure_score": 0,
+                "formation_score": 0,
+                "accuracy_score": 0,
+                "spacing_score": 0
+            })
+
+        # Aggregate scores
+        total_accuracy = 0
+        total_formation = 0
+        total_pressure = 0
+        count_accuracy = 0
+        count_formation = 0
+        count_pressure = 0
+
+        for report in reports:
+            # Accuracy
+            if "accuracy" in report and report["accuracy"] is not None:
+                total_accuracy += report["accuracy"]
+                count_accuracy += 1
+            
+            # Formation score
+            analysis = report.get("analysis", {})
+            if "formation_score" in analysis and analysis["formation_score"] is not None:
+                total_formation += analysis["formation_score"]
+                count_formation += 1
+            
+            # Pressure score (default to 0 if null)
+            pressure = analysis.get("pressure_score")
+            if pressure is not None:
+                total_pressure += pressure
+                count_pressure += 1
+            # Note: Even if null, we don't count it, so it defaults to 0
+
+        # Calculate averages
+        avg_accuracy = total_accuracy / count_accuracy if count_accuracy > 0 else 0
+        avg_formation = total_formation / count_formation if count_formation > 0 else 0
+        avg_pressure = total_pressure / count_pressure if count_pressure > 0 else 0
+
         return jsonify({
-            "msg": "reports_fetched",
-            "count": len(reports),
-            "data": reports
+            "msg": "reports_aggregated",
+            "pressure_score": round(avg_pressure, 1),
+            "formation_score": round(avg_formation, 1),
+            "accuracy_score": round(avg_accuracy, 1),
+            "spacing_score": 0  # Not implemented yet
         })
     except Exception as e:
         return jsonify({"msg": "error", "error": str(e)}), 500
