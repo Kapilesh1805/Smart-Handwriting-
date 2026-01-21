@@ -54,8 +54,8 @@ class ReportService {
         // Check if aggregated response
         if (jsonData.containsKey('pressure_score')) {
           // New aggregated format
-          final childName = childName ?? 'Unknown';
-          final childAge = childAge;
+          final finalChildName = childName ?? 'Unknown';
+          final finalChildAge = childAge;
           
           final analysisScore = AnalysisScore.fromJson({
             'pressure_score': jsonData['pressure_score'] ?? 0,
@@ -67,8 +67,8 @@ class ReportService {
           
           final childReport = ChildReport(
             childId: childId,
-            childName: childName,
-            age: childAge,
+            childName: finalChildName,
+            age: finalChildAge,
             grade: null,
             analysisScores: [analysisScore],
             generatedAt: DateTime.now(),
