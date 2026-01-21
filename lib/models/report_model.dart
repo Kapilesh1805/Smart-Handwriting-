@@ -29,6 +29,7 @@ class AnalysisScore {
   }
   final double? pressureScore;
   final double? spacingScore;
+  final double? sentenceFormationScore;
   // formationScore can be String (alphabet) or double (number mode)
   final dynamic formationScore;
   final double accuracyScore;
@@ -40,6 +41,7 @@ class AnalysisScore {
   AnalysisScore({
     required this.pressureScore,
     required this.spacingScore,
+    this.sentenceFormationScore,
     this.formationScore,
     required this.accuracyScore,
     required this.overallScore,
@@ -52,6 +54,7 @@ class AnalysisScore {
     // SAFE numeric parsing - keep as percentages, nullable
     final pressureScore = (json['pressure_score'] as num?)?.toDouble();
     final spacingScore = (json['spacing_score'] as num?)?.toDouble();
+    final sentenceFormationScore = (json['sentence_formation_score'] as num?)?.toDouble();
     final accuracyScore = (json['accuracy_score'] as num?)?.toDouble() ?? 0.0;
     final overallScore = (json['overall_score'] as num?)?.toDouble() ?? 0.0;
     
@@ -69,6 +72,7 @@ class AnalysisScore {
     return AnalysisScore(
       pressureScore: pressureScore,
       spacingScore: spacingScore,
+      sentenceFormationScore: sentenceFormationScore,
       formationScore: formationScore,
       accuracyScore: accuracyScore,
       overallScore: overallScore,
@@ -110,6 +114,13 @@ class ChildReport {
     final validScores = analysisScores.where((s) => s.spacingScore != null).toList();
     if (validScores.isEmpty) return 0;
     final avg = validScores.fold<double>(0.0, (sum, s) => sum + s.spacingScore!) / validScores.length;
+    return AnalysisScore.convertPercentageToScale(avg);
+  }
+
+  int get averageSentenceFormation {
+    final validScores = analysisScores.where((s) => s.sentenceFormationScore != null).toList();
+    if (validScores.isEmpty) return 0;
+    final avg = validScores.fold<double>(0.0, (sum, s) => sum + s.sentenceFormationScore!) / validScores.length;
     return AnalysisScore.convertPercentageToScale(avg);
   }
 

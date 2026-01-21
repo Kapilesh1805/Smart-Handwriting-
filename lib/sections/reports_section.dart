@@ -270,12 +270,6 @@ class _ReportsSectionState extends State<ReportsSection> {
           _buildAssessmentSection(theme, report),
           const SizedBox(height: 24),
 
-          // Visual Analytics
-          if (report.analysisScores.isNotEmpty) ...[
-            _buildVisualAnalyticsSection(theme, report),
-            const SizedBox(height: 24),
-          ],
-
           // Recommendations
           _buildRecommendationsSection(theme, report),
           const SizedBox(height: 24),
@@ -423,7 +417,7 @@ class _ReportsSectionState extends State<ReportsSection> {
                 'Progress Chart',
                 SizedBox(
                   height: 150,
-                  child: _buildLineChart(trend, 'overall', Colors.green),
+                  child: _buildLineChart(trend, 'accuracy', Colors.green),
                 ),
               ),
             ),
@@ -459,9 +453,12 @@ class _ReportsSectionState extends State<ReportsSection> {
     String key,
     Color color,
   ) {
-    if (trend.isEmpty) {
+    if (trend.isEmpty || trend.length < 2) {
       return Center(
-        child: Text('No data available', style: TextStyle(color: Colors.grey.shade400)),
+        child: Text(
+          trend.isEmpty ? 'No data available' : 'Not enough data to generate graph',
+          style: TextStyle(color: Colors.grey.shade400),
+        ),
       );
     }
 
@@ -569,9 +566,11 @@ class _ReportsSectionState extends State<ReportsSection> {
   List<Map<String, dynamic>> _getAssessmentComponents(ChildReport report) {
     final scores = report.analysisScores;
     final hasData = scores.isNotEmpty;
+    final firstScore = hasData ? scores.first : null;
 
-    // If no assessment data is available, show 'Take up a test' as the score
-    const noDataLabel = 'Take up a test';
+    // Check if specific scores are available
+    final hasSpacing = firstScore?.spacingScore != null;
+    final hasSentenceFormation = firstScore?.sentenceFormationScore != null;
 
     List<Map<String, dynamic>> components = [
       {
@@ -587,12 +586,6 @@ class _ReportsSectionState extends State<ReportsSection> {
         'isAssessed': hasData,
       },
       {
-        'name': 'Spacing',
-        'score': report.averageSpacing.toString(),
-        'notes': 'Letter and word spacing',
-        'isAssessed': true,
-      },
-      {
         'name': 'Accuracy',
         'score': report.accuracyRank.toString(),
         'notes': 'Overall writing accuracy',
@@ -601,15 +594,15 @@ class _ReportsSectionState extends State<ReportsSection> {
       // New additional rows requested: Pre writing shapes and Sentence writing (word formation)
       {
         'name': 'Pre writing Shapes',
-        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation) : noDataLabel,
+        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation).toString() : 'Take up a test',
         'notes': 'Pre-writing shape recognition and tracing',
         'isAssessed': hasData,
       },
       {
         'name': 'Sentence Writing - Word Formation',
-        'score': hasData ? ReportService.convertPercentageToScale(report.overallAverage) : noDataLabel,
+        'score': hasSentenceFormation ? report.averageSentenceFormation.toString() : 'Take up a test',
         'notes': 'Word formation and sentence-level structure',
-        'isAssessed': hasData,
+        'isAssessed': hasSentenceFormation,
       },
     ];
 

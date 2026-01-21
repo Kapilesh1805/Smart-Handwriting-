@@ -57,24 +57,51 @@ class ReportService {
           final finalChildName = childName ?? 'Unknown';
           final finalChildAge = childAge;
           
-          final analysisScore = AnalysisScore.fromJson({
-            'pressure_score': jsonData['pressure_score'] ?? 0,
-            'formation_score': jsonData['formation_score'] ?? 0,
-            'accuracy_score': jsonData['accuracy_score'] ?? 0,
-            'spacing_score': jsonData['spacing_score'] ?? 0,
-            'timestamp': DateTime.now().toIso8601String(),
-          });
+          List<AnalysisScore> analysisScores = [];
+          
+          // Check if series data is available
+          final pressureSeries = jsonData['pressure_series'] as List<dynamic>? ?? [];
+          final accuracySeries = jsonData['accuracy_series'] as List<dynamic>? ?? [];
+          final formationSeries = jsonData['formation_series'] as List<dynamic>? ?? [];
+          final timestamps = jsonData['timestamps'] as List<dynamic>? ?? [];
+          
+          if (pressureSeries.isNotEmpty && accuracySeries.isNotEmpty && timestamps.isNotEmpty) {
+            // Create AnalysisScore for each data point
+            final minLength = [pressureSeries.length, accuracySeries.length, formationSeries.length, timestamps.length].reduce((a, b) => a < b ? a : b);
+            for (int i = 0; i < minLength; i++) {
+              final score = AnalysisScore.fromJson({
+                'pressure_score': pressureSeries[i],
+                'formation_score': formationSeries.length > i ? formationSeries[i] : 0,
+                'accuracy_score': accuracySeries[i],
+                'spacing_score': null,
+                'sentence_formation_score': null,
+                'timestamp': timestamps[i] is String ? timestamps[i] : DateTime.now().toIso8601String(),
+              });
+              analysisScores.add(score);
+            }
+          } else {
+            // Fallback to single aggregated score
+            final analysisScore = AnalysisScore.fromJson({
+              'pressure_score': jsonData['pressure_score'] ?? 0,
+              'formation_score': jsonData['formation_score'] ?? 0,
+              'accuracy_score': jsonData['accuracy_score'] ?? 0,
+              'spacing_score': jsonData['spacing_score'],
+              'sentence_formation_score': jsonData['sentence_formation_score'],
+              'timestamp': DateTime.now().toIso8601String(),
+            });
+            analysisScores.add(analysisScore);
+          }
           
           final childReport = ChildReport(
             childId: childId,
             childName: finalChildName,
             age: finalChildAge,
             grade: null,
-            analysisScores: [analysisScore],
+            analysisScores: analysisScores,
             generatedAt: DateTime.now(),
           );
           
-          debugPrint('✅ Aggregated report loaded: Pressure: ${analysisScore.pressureScore}%, Formation: ${analysisScore.formationScore}%, Accuracy: ${analysisScore.accuracyScore}%');
+          debugPrint('✅ Aggregated report loaded with ${analysisScores.length} data points');
           return childReport;
         }
         
