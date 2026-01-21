@@ -160,7 +160,11 @@ def log_handwriting_session(
                 "is_correct": bool(is_correct),
                 "accuracy": conf,
                 "evaluation_mode": evaluation_mode,
-                "generated_at": datetime.datetime.utcnow()
+                "generated_at": datetime.datetime.utcnow(),
+                "analysis": {
+                    "pressure_score": press_score,
+                    "formation_score": form_score,
+                }
             }
             reports_col.insert_one(report_doc)
         except Exception as e:
