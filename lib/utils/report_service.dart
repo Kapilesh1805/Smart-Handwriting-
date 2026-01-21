@@ -50,6 +50,35 @@ class ReportService {
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
+        
+        // Check if aggregated response
+        if (jsonData.containsKey('pressure_score')) {
+          // New aggregated format
+          final childName = childName ?? 'Unknown';
+          final childAge = childAge;
+          
+          final analysisScore = AnalysisScore.fromJson({
+            'pressure_score': jsonData['pressure_score'] ?? 0,
+            'formation_score': jsonData['formation_score'] ?? 0,
+            'accuracy_score': jsonData['accuracy_score'] ?? 0,
+            'spacing_score': jsonData['spacing_score'] ?? 0,
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          
+          final childReport = ChildReport(
+            childId: childId,
+            childName: childName,
+            age: childAge,
+            grade: null,
+            analysisScores: [analysisScore],
+            generatedAt: DateTime.now(),
+          );
+          
+          debugPrint('✅ Aggregated report loaded: Pressure: ${analysisScore.pressureScore}%, Formation: ${analysisScore.formationScore}%, Accuracy: ${analysisScore.accuracyScore}%');
+          return childReport;
+        }
+        
+        // Legacy format (list of reports)
         final reports = jsonData['data'] as List<dynamic>? ?? [];
 
         if (reports.isEmpty) {
@@ -66,17 +95,10 @@ class ReportService {
         // Aggregate all analysis scores from reports with improved parsing
         final allScores = <AnalysisScore>[];
         for (final report in reports) {
-          final analysis = report['analysis'] as Map<String, dynamic>? ?? {};
+          final summary = report['summary'] as Map<String, dynamic>? ?? {};
           
-          // Merge top-level fields with analysis
-          final combinedData = {
-            ...report,  // includes accuracy, etc.
-            ...analysis,  // includes pressure_score, formation_score
-            'accuracy_score': report['accuracy'],  // map accuracy to accuracy_score
-            'overall_score': report['accuracy'],  // use accuracy as overall for now
-            'letter': report['character'],  // map character to letter
-            'feedback': 'Analysis completed',  // default feedback
-          };
+          // Use ONLY summary data from reports collection
+          final combinedData = summary;
           
           if (combinedData.isNotEmpty) {
             // Parse timestamp safely - handle both ISO 8601 and HTTP date formats
