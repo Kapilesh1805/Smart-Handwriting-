@@ -33,47 +33,154 @@ def get_child_reports(child_id):
                 "pressure_score": 0,
                 "formation_score": 0,
                 "accuracy_score": 0,
-                "spacing_score": 0
+                "spacing_score": None,
+                "sentence_formation_score": None
             })
 
-        # Aggregate scores
-        total_accuracy = 0
-        total_formation = 0
-        total_pressure = 0
-        count_accuracy = 0
-        count_formation = 0
-        count_pressure = 0
-
+        # Group reports by evaluation_mode
+        grouped = {}
         for report in reports:
-            # Accuracy
-            if "accuracy" in report and report["accuracy"] is not None:
-                total_accuracy += report["accuracy"]
-                count_accuracy += 1
+            mode = report.get("evaluation_mode", "alphabet")
+            if mode not in grouped:
+                grouped[mode] = []
+            grouped[mode].append(report)
+
+        # Aggregate scores by mode
+        results = {
+            "pressure_score": 0,
+            "formation_score": 0,
+            "accuracy_score": 0,
+            "spacing_score": None,
+            "sentence_formation_score": None
+        }
+
+        # Alphabet mode: accuracy, formation_score, pressure_score
+        if "alphabet" in grouped:
+            alphabet_reports = grouped["alphabet"]
+            acc_total = 0
+            acc_count = 0
+            form_total = 0
+            form_count = 0
+            press_total = 0
+            press_count = 0
             
-            # Formation score
-            analysis = report.get("analysis", {})
-            if "formation_score" in analysis and analysis["formation_score"] is not None:
-                total_formation += analysis["formation_score"]
-                count_formation += 1
+            for r in alphabet_reports:
+                if "accuracy" in r and r["accuracy"] is not None:
+                    acc_total += r["accuracy"]
+                    acc_count += 1
+                analysis = r.get("analysis", {})
+                if "formation_score" in analysis and analysis["formation_score"] is not None:
+                    form_total += analysis["formation_score"]
+                    form_count += 1
+                if "pressure_score" in analysis and analysis["pressure_score"] is not None:
+                    press_total += analysis["pressure_score"]
+                    press_count += 1
             
-            # Pressure score (default to 0 if null)
+            results["accuracy_score"] = acc_total / acc_count if acc_count > 0 else 0
+            results["formation_score"] = form_total / form_count if form_count > 0 else 0
+            results["pressure_score"] = press_total / press_count if press_count > 0 else 0
+
+        # Sentence mode: accuracy as sentence_formation_score, pressure_score
+        if "sentence" in grouped:
+            sentence_reports = grouped["sentence"]
+            sent_form_total = 0
+            sent_form_count = 0
+            sent_press_total = 0
+            sent_press_count = 0
+            
+            for r in sentence_reports:
+                if "accuracy" in r and r["accuracy"] is not None:
+                    sent_form_total += r["accuracy"]
+                    sent_form_count += 1
+                analysis = r.get("analysis", {})
+                if "pressure_score" in analysis and analysis["pressure_score"] is not None:
+                    sent_press_total += analysis["pressure_score"]
+                    sent_press_count += 1
+            
+            results["sentence_formation_score"] = sent_form_total / sent_form_count if sent_form_count > 0 else None
+            # Update pressure_score if sentence has it (prefer prewriting, but use sentence if available)
+            if sent_press_count > 0 and results["pressure_score"] == 0:
+                results["pressure_score"] = sent_press_total / sent_press_count
+
+        # Prewriting mode: pressure_score
+        if "prewriting" in grouped:
+            prewriting_reports = grouped["prewriting"]
+            pre_press_total = 0
+            pre_press_count = 0
+            
+            for r in prewriting_reports:
+                analysis = r.get("analysis", {})
+                if "pressure_score" in analysis and analysis["pressure_score"] is not None:
+                    pre_press_total += analysis["pressure_score"]
+                    pre_press_count += 1
+            
+            if pre_press_count > 0:
+                results["pressure_score"] = pre_press_total / pre_press_count
+
+        # Round scores
+        for key in ["pressure_score", "formation_score", "accuracy_score"]:
+            if results[key] != 0:
+                results[key] = round(results[key], 1)
+
+        # Get historical data for series (last 10 sessions per mode)
+        series_data = {
+            "pressure_series": [],
+            "accuracy_series": [],
+            "formation_series": [],
+            "timestamps": []
+        }
+
+        # Collect all reports sorted by created_at descending
+        all_reports = list(
+            reports_col.find(
+                {"child_id": child_id},
+                {"_id": 0, "created_at": 1, "evaluation_mode": 1, "accuracy": 1, "analysis": 1}
+            ).sort("created_at", -1).limit(50)  # Get last 50 for series
+        )
+
+        # Group by mode and take last 10 per mode
+        mode_groups = {}
+        for r in all_reports:
+            mode = r.get("evaluation_mode", "alphabet")
+            if mode not in mode_groups:
+                mode_groups[mode] = []
+            if len(mode_groups[mode]) < 10:
+                mode_groups[mode].append(r)
+
+        # Build series from alphabet mode (for accuracy and formation)
+        if "alphabet" in mode_groups:
+            for r in reversed(mode_groups["alphabet"]):  # Reverse to chronological order
+                series_data["accuracy_series"].append(r.get("accuracy", 0))
+                analysis = r.get("analysis", {})
+                series_data["formation_series"].append(analysis.get("formation_score", 0))
+                series_data["timestamps"].append(r.get("created_at", "").split("T")[0] if r.get("created_at") else "")
+
+        # Build pressure series from prewriting or sentence
+        pressure_sources = []
+        if "prewriting" in mode_groups:
+            pressure_sources.extend(mode_groups["prewriting"])
+        if "sentence" in mode_groups:
+            pressure_sources.extend(mode_groups["sentence"])
+        
+        # Sort by created_at and take last 10
+        pressure_sources.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        for r in reversed(pressure_sources[:10]):
+            analysis = r.get("analysis", {})
             pressure = analysis.get("pressure_score")
             if pressure is not None:
-                total_pressure += pressure
-                count_pressure += 1
-            # Note: Even if null, we don't count it, so it defaults to 0
+                series_data["pressure_series"].append(pressure)
 
-        # Calculate averages
-        avg_accuracy = total_accuracy / count_accuracy if count_accuracy > 0 else 0
-        avg_formation = total_formation / count_formation if count_formation > 0 else 0
-        avg_pressure = total_pressure / count_pressure if count_pressure > 0 else 0
+        # Ensure all series have same length
+        min_length = min(len(series_data["pressure_series"]), len(series_data["accuracy_series"]))
+        series_data["pressure_series"] = series_data["pressure_series"][:min_length]
+        series_data["accuracy_series"] = series_data["accuracy_series"][:min_length]
+        series_data["formation_series"] = series_data["formation_series"][:min_length]
+        series_data["timestamps"] = series_data["timestamps"][:min_length]
 
         return jsonify({
             "msg": "reports_aggregated",
-            "pressure_score": round(avg_pressure, 1),
-            "formation_score": round(avg_formation, 1),
-            "accuracy_score": round(avg_accuracy, 1),
-            "spacing_score": 0  # Not implemented yet
+            **results,
+            **series_data
         })
     except Exception as e:
         return jsonify({"msg": "error", "error": str(e)}), 500
