@@ -6,15 +6,15 @@ import 'dart:io' show Platform;
 
 class Config {
   /// Centralized backend base URL.
-  /// Default is localhost equivalent using loopback IP to avoid name resolution issues.
+  /// Production URL for Railway deployment.
   /// Change `baseUrl` here if you want a different default.
-  static const String baseUrl = 'http://127.0.0.1:5000';
+  static const String baseUrl = 'https://smart-handwriting-backend-production.up.railway.app';
 
   /// API base url getter - uses Android emulator alias when running on Android.
   static String get apiBaseUrl {
     try {
       if (!kIsWeb && Platform.isAndroid) {
-        return 'http://10.0.2.2:5000';
+        return 'https://smart-handwriting-backend-production.up.railway.app';
       }
     } catch (_) {
       // Platform not available or other issue - fallback to baseUrl

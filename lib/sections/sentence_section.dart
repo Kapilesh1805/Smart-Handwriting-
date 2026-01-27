@@ -152,11 +152,12 @@ class _SentenceSectionState extends State<SentenceSection> {
           showAnalysis = true;
           isProcessing = false;
 
-          // STRICTLY BASED ON BACKEND STATUS ONLY
-          if (result['status'] == 'Correct') {
+          // Use legibility_status from backend response
+          final legibilityStatus = result['legibility_status'];
+          if (legibilityStatus == 'PASS') {
             feedbackMessage = '✅ Well Done';
-          } else if (result['status'] == 'Incorrect') {
-            feedbackMessage = '⚠️ Keep Trying';
+          } else if (legibilityStatus == 'FAIL') {
+            feedbackMessage = '⚠️ Try again';
           } else {
             feedbackMessage = 'Analysis completed.';
           }
@@ -233,6 +234,16 @@ class _SentenceSectionState extends State<SentenceSection> {
       feedbackMessage = '';
     });
     _clearCanvas();
+  }
+
+  String _getMotivationalMessage(double confidence) {
+    if (confidence >= 75) {
+      return "Great job! Your sentence looks really good 👏";
+    } else if (confidence >= 67) {
+      return "Nice try! Your sentence is correct, just needs a little more practice 💪";
+    } else {
+      return "Good effort! Try once more, you are getting better 🌟";
+    }
   }
 
   @override
@@ -427,9 +438,9 @@ class _SentenceSectionState extends State<SentenceSection> {
             // Analysis Results
             if (showAnalysis && analysisResult != null) ...[
               Card(
-                color: analysisResult!['status'] == 'Correct'
+                color: analysisResult!['legibility_status'] == 'PASS'
                     ? Colors.green.shade50
-                    : Colors.orange.shade50,
+                    : Colors.red.shade50,
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -438,53 +449,47 @@ class _SentenceSectionState extends State<SentenceSection> {
                       Row(
                         children: [
                           Icon(
-                            analysisResult!['status'] == 'Correct'
+                            analysisResult!['legibility_status'] == 'PASS'
                                 ? Icons.check_circle
-                                : Icons.warning,
-                            color: analysisResult!['status'] == 'Correct'
+                                : Icons.error,
+                            color: analysisResult!['legibility_status'] == 'PASS'
                                 ? Colors.green
-                                : Colors.orange,
+                                : Colors.red,
+                            size: 24,
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            analysisResult!['status'] == 'Correct'
-                                ? '✅ Well Done'
-                                : '⚠️ Keep Trying',
+                            analysisResult!['legibility_status'] == 'PASS'
+                                ? 'Well Done'
+                                : 'Try Again',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: analysisResult!['status'] == 'Correct'
+                              color: analysisResult!['legibility_status'] == 'PASS'
                                   ? Colors.green
-                                  : Colors.orange,
+                                  : Colors.red,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Text(
-                        feedbackMessage,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 12),
-                      // ONLY SHOW ACCURACY AND PRESSURE FOR CORRECT RESPONSES
-                      if (analysisResult!['status'] == 'Correct') ...[
-                        if (analysisResult!['accuracy'] != null) ...[
-                          Text(
-                            'Accuracy: ${analysisResult!['accuracy']}%',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                        Text(
-                          'Pressure: ${(lastPressure ?? 0).toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        _getMotivationalMessage(
+                          (analysisResult!['similarity_score'] ?? 0.0) * 100,
                         ),
-                      ],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Confidence: ${((analysisResult!['similarity_score'] ?? 0.0) * 100).toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),

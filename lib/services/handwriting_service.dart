@@ -38,6 +38,11 @@ class HandwritingAnalysis {
   final String? evaluationMode;
   // CLIP similarity map: digit -> similarity score (-1 to 1)
   final Map<String, double>? clipSimilarityMap;
+  // ✅ NEW: HF response fields
+  final String? legibilityStatus;
+  final String? qualityLabel;
+  final double? qualityScore;
+  final double? ocrConfidence;
 
   HandwritingAnalysis({
     required this.letter,
@@ -63,14 +68,18 @@ class HandwritingAnalysis {
     this.rawPressurePoints,
     this.evaluationMode,
     this.clipSimilarityMap,
+    this.legibilityStatus,
+    this.qualityLabel,
+    this.qualityScore,
+    this.ocrConfidence,
   });
 
   factory HandwritingAnalysis.fromJson(Map<String, dynamic> json) {
-    final analysis = json['analysis'] as Map<String, dynamic>? ?? {};
+    final analysis = json['analysis'] as Map<String, dynamic>? ?? json;  // Fallback to json if no analysis key
     final rawPoints = json['pressure_points_received'] ?? analysis['pressure_points'] ?? json['pressure_points'];
     
     // ✅ FIX: SAFE isCorrect parsing - Check both nested and top-level locations
-    bool? isCorrectValue = analysis['is_correct'] as bool? ?? json['is_correct'] as bool?;
+    bool isCorrectValue = analysis['is_correct'] as bool? ?? json['is_correct'] as bool? ?? false;
     debugPrint('[HandwritingAnalysis] isCorrect=$isCorrectValue (nested=${analysis['is_correct']}, toplevel=${json['is_correct']})');
     
     // ✅ NEW: Parse from stable response contract (confidence, formation, pressure)
@@ -134,6 +143,11 @@ class HandwritingAnalysis {
       // ✅ NEW: Extract evaluation mode from response
       evaluationMode: json['evaluation_mode'] as String? ?? json['mode'] as String? ?? 'alphabet',
       clipSimilarityMap: clipSimilarityMap,
+      // ✅ NEW: HF response fields
+      legibilityStatus: json['legibility_status'] as String?,
+      qualityLabel: json['quality_label'] as String?,
+      qualityScore: (json['quality_score'] as num?)?.toDouble(),
+      ocrConfidence: (json['ocr_confidence'] as num?)?.toDouble(),
     );
   }
 }
@@ -225,6 +239,7 @@ class HandwritingService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         debugPrint('✅ Analysis received successfully');
+        debugPrint('📄 Parsed data keys: ${data.keys}');
         // If backend echoes pressure points, log them for verification
         if (data.containsKey('pressure_points_received')) {
           debugPrint('🧾 Backend echoed pressure points: ${data['pressure_points_received']}');

@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:image/image.dart' as img;
 import '../widgets/unified_writing_canvas.dart';
 import '../services/child_service.dart';
 import '../services/handwriting_service.dart';
@@ -119,6 +120,7 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
   bool isProcessingML = false;
   bool isBackendConnected = false;
   HandwritingAnalysis? _analysisResult;
+  int lastStrokeCount = 0;
   double? lastPressure;
   double? rawPressure;
   int? pressurePointCount;
@@ -303,6 +305,9 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
 
       // Send to backend for ML analysis (now with image!)
       debugPrint('📤 DEBUG: Sending request with evaluationMode=$currentEvaluationMode (isNumberMode=$isNumberMode)');
+      debugPrint('📝 Character: $currentCharacter, stroke count: ${strokesData?.length ?? 0}');
+      
+      lastStrokeCount = strokesData?.length ?? 0;
       
       final analysis = await HandwritingService.analyzeHandwriting(
         childId: selectedChildId!,
@@ -349,9 +354,13 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
           final ui.Image image = await boundary.toImage(pixelRatio: ratio);
           final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
           if (byteData != null) {
-            final Uint8List pngBytes = byteData.buffer.asUint8List();
+            Uint8List pngBytes = byteData.buffer.asUint8List();
+            
+            // Process the image: crop to bounding box, add padding, center, scale to 256x256
+            pngBytes = _processCanvasImage(pngBytes);
+            
             final String base64Image = base64Encode(pngBytes);
-            return 'data:image/png;base64,$base64Image';
+            return base64Image;  // Return base64 without data URL prefix
           }
         } catch (e) {
           debugPrint('Canvas capture attempt (ratio=$ratio) failed: $e');
@@ -362,6 +371,52 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
       debugPrint('Error capturing canvas: $e');
     }
     return null;
+  }
+
+  Uint8List _processCanvasImage(Uint8List pngBytes) {
+    final originalImage = img.decodePng(pngBytes);
+    if (originalImage == null) return pngBytes;
+    
+    // Find bounding box of non-white pixels
+    int minX = originalImage.width, minY = originalImage.height, maxX = 0, maxY = 0;
+    bool hasStrokes = false;
+    for (int y = 0; y < originalImage.height; y++) {
+      for (int x = 0; x < originalImage.width; x++) {
+        final pixel = originalImage.getPixel(x, y);
+        final r = pixel.r, g = pixel.g, b = pixel.b;
+        if (r < 250 || g < 250 || b < 250) {  // Not white
+          hasStrokes = true;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    
+    if (!hasStrokes) return pngBytes;
+    
+    final width = maxX - minX + 1;
+    final height = maxY - minY + 1;
+    
+    // Crop
+    final cropped = img.copyCrop(originalImage, x: minX, y: minY, width: width, height: height);
+    
+    // Add 12% padding
+    final padX = (width * 0.12).round();
+    final padY = (height * 0.12).round();
+    final paddedWidth = width + 2 * padX;
+    final paddedHeight = height + 2 * padY;
+    final padded = img.Image(width: paddedWidth, height: paddedHeight);
+    img.fill(padded, color: img.ColorRgb8(255, 255, 255));
+    img.compositeImage(padded, cropped, dstX: padX, dstY: padY);
+    
+    // Resize to 256x256
+    final scaled = img.copyResize(padded, width: 256, height: 256, interpolation: img.Interpolation.linear);
+    
+    debugPrint('Canvas processed: original ${originalImage.width}x${originalImage.height}, cropped ${width}x${height}, final 256x256');
+    
+    return img.encodePng(scaled);
   }
 
   // Legacy feedback generation removed. Rendering is now driven directly
@@ -597,7 +652,7 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
                       child: Row(
                         children: [
                           const Text('Pressure: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('Pressure: ${pressurePointCount ?? 'N/A'}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${pressurePointCount ?? 'N/A'}', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -696,38 +751,56 @@ class _WritingInterfaceSectionState extends State<WritingInterfaceSection> {
     Widget content;
 
     if (_analysisResult != null) {
-      final bool? isCorrect = _analysisResult!.isCorrect;
+      final legibilityStatus = _analysisResult!.legibilityStatus;
+      final isPass = legibilityStatus == 'PASS';
 
-      if (isCorrect == true) {
-        // Show numeric scores exactly as returned by backend (no transformation)
-        final double confidence = _analysisResult!.confidence;
-        final double formation = _analysisResult!.formation;
-
+      if (isPass) {
         bgColor = Colors.green.shade50;
         textColor = Colors.green.shade900;
 
         final List<Widget> lines = [];
         lines.add(const Text('✅ Correct Letter', style: TextStyle(fontWeight: FontWeight.bold)));
         lines.add(const SizedBox(height: 8));
-        lines.add(Text('Accuracy: ${confidence.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
-        lines.add(const SizedBox(height: 4));
-        lines.add(Text('Formation: ${formation.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
-        lines.add(const SizedBox(height: 4));
-        lines.add(Text('Pressure: ${pressurePointCount ?? 'N/A'}', style: TextStyle(color: textColor)));
+
+        if (_analysisResult!.ocrConfidence != null) {
+          lines.add(Text('Confidence: ${_analysisResult!.ocrConfidence!.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
+        }
+
+        if (_analysisResult!.qualityLabel != null) {
+          lines.add(const SizedBox(height: 4));
+          lines.add(Text('Quality: ${_analysisResult!.qualityLabel}', style: TextStyle(color: textColor)));
+        }
+
+        if (_analysisResult!.qualityScore != null) {
+          lines.add(const SizedBox(height: 4));
+          lines.add(Text('Quality Score: ${_analysisResult!.qualityScore!.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
+        }
 
         content = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: lines,
         );
-
-      } else if (isCorrect == false) {
-        // Show only incorrect message
+      } else {
         bgColor = Colors.red.shade50;
         textColor = Colors.red.shade900;
-        content = const Text('❌ Incorrect Letter', style: TextStyle(fontWeight: FontWeight.bold));
-      } else {
-        // If isCorrect is null, show backend-provided feedback string (not used for evaluation)
-        content = Text(_analysisResult!.feedback, style: TextStyle(color: textColor));
+
+        final List<Widget> lines = [];
+        lines.add(const Text('❌ Incorrect Letter', style: TextStyle(fontWeight: FontWeight.bold)));
+        lines.add(const SizedBox(height: 8));
+
+        if (_analysisResult!.qualityLabel != null) {
+          lines.add(Text('Quality: ${_analysisResult!.qualityLabel}', style: TextStyle(color: textColor)));
+        }
+
+        if (_analysisResult!.qualityScore != null) {
+          lines.add(const SizedBox(height: 4));
+          lines.add(Text('Quality Score: ${_analysisResult!.qualityScore!.toStringAsFixed(1)}%', style: TextStyle(color: textColor)));
+        }
+
+        content = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: lines,
+        );
       }
     } else {
       // No backend response yet: show generic feedback text

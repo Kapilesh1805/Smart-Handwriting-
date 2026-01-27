@@ -6,8 +6,8 @@ import '../config/api_config.dart';
 // File-level status color helper used by sidebar and other widgets
 Color statusColor(String status) {
   final s = status.toLowerCase();
-  if (s.contains('completed')) return const Color(0xFF4CAF50);
-  if (s.contains('pending')) return const Color(0xFFFFC107);
+  if (s.contains('completed')) return const Color(0xFF2E7D32); // Dark green for completed
+  if (s.contains('scheduled') || s.contains('pending')) return const Color(0xFFFFC107); // Yellow for scheduled/pending
   return Colors.grey;
 }
 
@@ -97,6 +97,7 @@ class AppointmentSection extends StatefulWidget {
 class _AppointmentSectionState extends State<AppointmentSection> {
   bool _loading = true;
   String? _error;
+  List<Appointment> _allAppointments = [];
 
   DateTime _selectedDate = DateTime.now();
 
@@ -113,7 +114,7 @@ class _AppointmentSectionState extends State<AppointmentSection> {
     });
 
     try {
-      await AppointmentService.getAllAppointments();
+      _allAppointments = await AppointmentService.getAllAppointments();
       if (mounted) {
         setState(() {
           _loading = false;
@@ -135,8 +136,66 @@ class _AppointmentSectionState extends State<AppointmentSection> {
     return List.generate(7, (i) => DateTime(start.year, start.month, start.day + i));
   }
 
-  // Note: appointment filtering and status color are handled by
-  // SidebarAppointmentList and the top-level `statusColor` helper.
+  List<Appointment> _getAppointmentsForDate(DateTime date) {
+    return _allAppointments.where((a) {
+      try {
+        // Try different date formats
+        DateTime? parsed;
+        parsed ??= DateTime.tryParse(a.date);
+        if (parsed == null) {
+          try {
+            parsed = DateFormat('yyyy-MM-dd').parse(a.date);
+          } catch (_) {}
+        }
+        if (parsed == null) {
+          try {
+            parsed = DateFormat('dd/MM/yyyy').parse(a.date);
+          } catch (_) {}
+        }
+        if (parsed != null) {
+          return parsed.year == date.year && parsed.month == date.month && parsed.day == date.day;
+        }
+        return false;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+  }
+
+  List<Appointment> _getAppointmentsForTime(DateTime date, int hour) {
+    final dayAppointments = _getAppointmentsForDate(date);
+    return dayAppointments.where((a) {
+      try {
+        final timeParts = a.time.split(':');
+        final appointmentHour = int.parse(timeParts[0]);
+        return appointmentHour == hour;
+      } catch (_) {
+        return false;
+      }
+    }).toList();
+  }
+
+  void _toggleAppointmentStatus(Appointment appointment) {
+    // Toggle between 'scheduled' and 'completed'
+    final newStatus = appointment.status.toLowerCase() == 'completed' ? 'scheduled' : 'completed';
+
+    // Immediately update the local state for instant UI feedback
+    setState(() {
+      final index = _allAppointments.indexWhere((a) => a.id == appointment.id);
+      if (index != -1) {
+        _allAppointments[index] = Appointment(
+          id: appointment.id,
+          childName: appointment.childName,
+          therapistName: appointment.therapistName,
+          sessionType: appointment.sessionType,
+          date: appointment.date,
+          time: appointment.time,
+          status: newStatus,
+          createdAt: appointment.createdAt,
+        );
+      }
+    });
+  }
 
   Future<void> _showAddAppointmentDialog() async {
     final formKey = GlobalKey<FormState>();
@@ -200,6 +259,7 @@ class _AppointmentSectionState extends State<AppointmentSection> {
               TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: () async {
+                  final scaffoldMessenger = ScaffoldMessenger.of(context); // Capture messenger before async
                   if (!(formKey.currentState?.validate() ?? false)) return;
                   if (localPickedTime == null) {
                     if (!mounted) return;
@@ -229,14 +289,14 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                       _loadAppointments();
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (!mounted) return;
-                        messenger.showSnackBar(const SnackBar(content: Text('Appointment added')));
+                        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Appointment added'))); // ignore: use_build_context_synchronously
                       });
                     } catch (e) {
                       Navigator.pop(ctx2);
                       if (!mounted) return;
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (!mounted) return;
-                        messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Error: $e'))); // ignore: use_build_context_synchronously
                       });
                     }
                 },
@@ -322,23 +382,6 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (c) => AlertDialog(
-                      title: const Text('Set Reminder'),
-                      content: const Text('Set Reminder UI will be implemented here.'),
-                      actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close'))],
-                    ),
-                  ),
-                  icon: const Icon(Icons.notifications, size: 20),
-                  label: const Text('Set Reminder'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    backgroundColor: Colors.black,
-                  ),
-                ),
               ],
             ),
           ],
@@ -394,6 +437,7 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                   itemBuilder: (context, idx) {
                     final hour = idx; // 0..23
                     final timeLabel = DateFormat('HH:mm').format(DateTime(2000, 1, 1, hour));
+                    final hourAppointments = _getAppointmentsForTime(_selectedDate, hour);
 
                     return Container(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -403,15 +447,50 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: Container(
-                              height: 44,
+                              height: hourAppointments.isNotEmpty ? 60 : 44,
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
+                                color: hourAppointments.isNotEmpty ? Colors.blue.shade50 : Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(22),
-                                border: Border.all(color: Colors.grey.shade200),
+                                border: Border.all(color: hourAppointments.isNotEmpty ? Colors.blue.shade200 : Colors.grey.shade200),
                               ),
                               alignment: Alignment.centerLeft,
                               padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: const Text(''),
+                              child: hourAppointments.isNotEmpty
+                                ? Container(
+                                    constraints: const BoxConstraints(minHeight: 60),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: hourAppointments.map((appointment) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 4.0),
+                                          child: Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 6,
+                                                backgroundColor: statusColor(appointment.status),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  '${appointment.childName} - ${appointment.sessionType}',
+                                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.edit, size: 16),
+                                                onPressed: () => _toggleAppointmentStatus(appointment),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  )
+                                : const Text(''),
                             ),
                           ),
                         ],
@@ -448,15 +527,15 @@ class _AppointmentSectionState extends State<AppointmentSection> {
                     const Text('Color coding:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     Row(children: [
-                      Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFF4CAF50), shape: BoxShape.circle)),
+                      Container(width: 12, height: 12, decoration: const BoxDecoration(color: Color(0xFF2E7D32), shape: BoxShape.circle)),
                       const SizedBox(width: 8),
                       const Text('Completed'),
                     ]),
                     const SizedBox(height: 8),
                     Row(children: [
-                      Container(width: 12, height: 12, decoration: BoxDecoration(color: const Color(0xFFFFC107), shape: BoxShape.circle)),
+                      Container(width: 12, height: 12, decoration: const BoxDecoration(color: Color(0xFFFFC107), shape: BoxShape.circle)),
                       const SizedBox(width: 8),
-                      const Text('Pending'),
+                      const Text('Scheduled'),
                     ]),
                     const SizedBox(height: 16),
                     const Divider(),

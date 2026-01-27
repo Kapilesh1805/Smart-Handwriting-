@@ -74,7 +74,7 @@ class ReportService {
                 'formation_score': formationSeries.length > i ? formationSeries[i] : 0,
                 'accuracy_score': accuracySeries[i],
                 'spacing_score': null,
-                'sentence_formation_score': null,
+                'sentence_formation_score': jsonData['sentence_formation_score'],
                 'timestamp': timestamps[i] is String ? timestamps[i] : DateTime.now().toIso8601String(),
               });
               analysisScores.add(score);

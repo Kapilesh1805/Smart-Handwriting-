@@ -30,24 +30,7 @@ class DrawingCanvasState extends State<DrawingCanvas> { // FIXED: Made public
       ];
     });
     
-    // TODO: ADD BACKEND API - Track drawing start time for assessment
-    // _logDrawingStart();
-  }
-
-  // TODO: ADD BACKEND API - Log when child starts drawing (engagement metric)
-  // Future<void> _logDrawingStart() async {
-  //   try {
-  //     await http.post(
-  //       Uri.parse('YOUR_API_URL/api/child/pre-writing/drawing-start'),
-  //       body: json.encode({
-  //         'childId': childId,
-  //         'timestamp': DateTime.now().toIso8601String(),
-  //       }),
-  //     );
-  //   } catch (e) {
-  //     print('Error logging drawing start: $e');
-  //   }
-  // }
+    }
 
   void _onPanUpdate(DragUpdateDetails details) {
     setState(() {
@@ -71,25 +54,7 @@ class DrawingCanvasState extends State<DrawingCanvas> { // FIXED: Made public
       currentStroke = [];
     });
     
-    // TODO: ADD BACKEND API - Auto-save stroke data periodically
-    // _autoSaveStroke();
-  }
-
-  // TODO: ADD BACKEND API - Auto-save drawing progress
-  // Future<void> _autoSaveStroke() async {
-  //   try {
-  //     await http.post(
-  //       Uri.parse('YOUR_API_URL/api/child/pre-writing/auto-save'),
-  //       body: json.encode({
-  //         'childId': childId,
-  //         'strokeCount': strokes.length,
-  //         'timestamp': DateTime.now().toIso8601String(),
-  //       }),
-  //     );
-  //   } catch (e) {
-  //     print('Error auto-saving: $e');
-  //   }
-  // }
+     }
 
   void clearCanvas() {
     setState(() {
@@ -107,21 +72,6 @@ class DrawingCanvasState extends State<DrawingCanvas> { // FIXED: Made public
     });
     widget.onUndo();
   }
-
-  // TODO: ADD METHOD - Get drawing data for backend submission
-  // Map<String, dynamic> getDrawingData() {
-  //   return {
-  //     'strokes': strokes.map((stroke) => {
-  //       'points': stroke.points.map((point) => {
-  //         'x': point.point.dx,
-  //         'y': point.point.dy,
-  //       }).toList(),
-  //       'timestamp': stroke.timestamp.toIso8601String(),
-  //     }).toList(),
-  //     'totalStrokes': strokes.length,
-  //   };
-  // }
-
   @override
   Widget build(BuildContext context) {
     return Container(

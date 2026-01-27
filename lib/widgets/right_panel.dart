@@ -46,13 +46,6 @@ class _RightPanelState extends State<RightPanel> {
         CustomCard(
           child: Row(
             children: [
-              // TODO: API INTEGRATION - Show user avatar if available
-              // user?.avatarUrl != null
-              //     ? CircleAvatar(
-              //         radius: 20.0,
-              //         backgroundImage: NetworkImage(user!.avatarUrl!),
-              //       )
-              //     : const CircleAvatar(radius: 20.0, child: Icon(Icons.person)),
               const CircleAvatar(radius: 20.0, child: Icon(Icons.person)),
               const SizedBox(width: 12.0),
               Expanded(

@@ -23,13 +23,8 @@ class ThemeService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', _isDarkMode);
     
-    // ==================== IMPORTANT: Notify all listeners ====================
-    notifyListeners();
-    // ========================================================================
-    
-    // TODO: ADD BACKEND API - Save theme preference
-    // _saveThemeToBackend();
-  }
+       notifyListeners();
+     }
 
   // ==================== LIGHT THEME ====================
   ThemeData get lightTheme => ThemeData(
@@ -95,43 +90,4 @@ class ThemeService extends ChangeNotifier {
       labelLarge: TextStyle(color: Color(0xFFFAFAFA)),
     ),
   );
-  // =====================================================
-
-  // TODO: ADD BACKEND API - Save theme preference
-  // Future<void> _saveThemeToBackend() async {
-  //   try {
-  //     final response = await http.put(
-  //       Uri.parse('YOUR_API_URL/api/user/preferences'),
-  //       headers: {
-  //         'Authorization': 'Bearer YOUR_TOKEN',
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: json.encode({
-  //         'theme': _isDarkMode ? 'dark' : 'light',
-  //       }),
-  //     );
-  //     if (response.statusCode != 200) {
-  //       throw Exception('Failed to save theme: ${response.statusCode}');
-  //     }
-  //   } catch (e) {
-  //     print('Error saving theme: $e');
-  //   }
-  // }
-
-  // TODO: ADD BACKEND API - Load user's theme preference from backend
-  // Future<void> _loadThemeFromBackend() async {
-  //   try {
-  //     final response = await http.get(
-  //       Uri.parse('YOUR_API_URL/api/user/preferences'),
-  //       headers: {'Authorization': 'Bearer YOUR_TOKEN'},
-  //     );
-  //     if (response.statusCode == 200) {
-  //       final data = json.decode(response.body);
-  //       _isDarkMode = data['theme'] == 'dark';
-  //       notifyListeners();
-  //     }
-  //   } catch (e) {
-  //     print('Error loading theme: $e');
-  //   }
-  // }
 }

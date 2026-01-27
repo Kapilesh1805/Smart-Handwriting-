@@ -83,15 +83,7 @@ class TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12.0),
-          SquareIconButton(
-            icon: Icons.tune,
-            isDarkMode: isDarkMode,
-          ),
-          const SizedBox(width: 12.0),
-          SquareIconButton(
-            icon: Icons.notifications_outlined,
-            isDarkMode: isDarkMode,
-          ),
+          // Filter and notification icons removed per UX request
           const SizedBox(width: 16.0),
           Row(
             children: [

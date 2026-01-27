@@ -25,8 +25,6 @@ class _SettingsSectionState extends State<SettingsSection> {
     // Load user profile from SharedPreferences (local store)
     _loadUserProfile();
   }
-
-  // TODO: ADD BACKEND API - Load user profile from backend
   Future<void> _loadUserProfile() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -109,7 +107,6 @@ class _SettingsSectionState extends State<SettingsSection> {
                     color: Colors.white,
                   ),
                   onPressed: () {
-                    // TODO: Navigate to Edit Profile page
                     _editProfile();
                   },
                 ),
@@ -157,7 +154,7 @@ class _SettingsSectionState extends State<SettingsSection> {
             title: 'Language',
             subtitle: 'English',
             onTap: () {
-              // TODO: ADD BACKEND API - Get available languages
+            
               _showLanguageDialog();
             },
           ),
@@ -170,23 +167,21 @@ class _SettingsSectionState extends State<SettingsSection> {
               _showAboutDialog();
             },
           ),
-
-          // Terms & Conditions
           SettingsListTile(
             icon: Icons.description_outlined,
             title: 'Terms & Conditions',
             onTap: () {
-              // TODO: ADD BACKEND API - Fetch T&C from backend
+              
               _showTermsAndConditions();
             },
           ),
 
-          // Privacy Policy
+        
           SettingsListTile(
             icon: Icons.privacy_tip_outlined,
             title: 'Privacy Policy',
             onTap: () {
-              // TODO: ADD BACKEND API - Fetch Privacy Policy from backend
+             
               _showPrivacyPolicy();
             },
           ),
@@ -197,7 +192,7 @@ class _SettingsSectionState extends State<SettingsSection> {
             title: 'Rate This App',
             iconColor: const Color(0xFFFFC107),
             onTap: () {
-              // TODO: ADD BACKEND API - Log rating action
+              
               _rateApp();
             },
           ),
@@ -208,7 +203,7 @@ class _SettingsSectionState extends State<SettingsSection> {
             title: 'Share This App',
             iconColor: const Color(0xFF4CAF50),
             onTap: () {
-              // TODO: ADD BACKEND API - Log share action
+              
               _shareApp();
             },
           ),
@@ -336,8 +331,6 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _showLanguageDialog() {
-    // TODO: ADD BACKEND API - Get available languages list
-    // GET /api/settings/languages
 
     showDialog(
       context: context,
@@ -347,8 +340,6 @@ class _SettingsSectionState extends State<SettingsSection> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _languageOption('English', true),
-            _languageOption('Tamil', false),
-            _languageOption('Hindi', false),
           ],
         ),
         actions: [
@@ -360,18 +351,7 @@ class _SettingsSectionState extends State<SettingsSection> {
       ),
     );
 
-    // TODO: ADD BACKEND API - Save language preference
-    // Future<void> _saveLanguage(String lang) async {
-    //   try {
-    //     await http.put(
-    //       Uri.parse('YOUR_API_URL/api/user/preferences'),
-    //       body: json.encode({'language': lang}),
-    //     );
-    //   } catch (e) {
-    //     print('Error saving language: $e');
-    //   }
-    // }
-  }
+     }
 
   Widget _languageOption(String language, bool isSelected) {
     return ListTile(
@@ -415,8 +395,6 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _showTermsAndConditions() {
-    // TODO: ADD BACKEND API - Fetch terms & conditions
-    // GET /api/settings/terms-and-conditions
 
     showDialog(
       context: context,
@@ -442,9 +420,7 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _showPrivacyPolicy() {
-    // TODO: ADD BACKEND API - Fetch privacy policy
-    // GET /api/settings/privacy-policy
-
+  
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -469,9 +445,7 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _rateApp() {
-    // TODO: ADD BACKEND API - Log rating action
-    // POST /api/user/rate-app
-
+  
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -497,9 +471,6 @@ class _SettingsSectionState extends State<SettingsSection> {
   }
 
   void _shareApp() {
-    // TODO: ADD BACKEND API - Log share action
-    // POST /api/user/share-app
-
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Share feature coming soon!'),

@@ -199,6 +199,70 @@ class AppointmentService {
     }
   }
 
+  static Future<void> updateAppointment({
+    required String appointmentId,
+    String? childName,
+    String? therapistName,
+    String? sessionType,
+    String? date,
+    String? time,
+    String? status,
+  }) async {
+    try {
+      final token = await Config.getAuthToken();
+      if (token == null) {
+        throw Exception('Unauthorized. Please login again.');
+      }
+
+      if (appointmentId.isEmpty) {
+        throw Exception('Appointment ID is required');
+      }
+
+      final updateData = <String, dynamic>{};
+      if (childName != null) updateData['child_name'] = childName;
+      if (therapistName != null) updateData['therapist_name'] = therapistName;
+      if (sessionType != null) updateData['session_type'] = sessionType;
+      if (date != null) updateData['date'] = date;
+      if (time != null) updateData['time'] = time;
+      if (status != null) updateData['status'] = status;
+
+      if (updateData.isEmpty) {
+        throw Exception('No fields to update');
+      }
+
+      final url = '${Config.apiBaseUrl}/appointment/update/$appointmentId';
+      print('🔗 Updating appointment at: $url');
+      print('📝 Data: $updateData');
+
+      final response = await http.put(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(updateData),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Request timeout. Please try again.'),
+      );
+
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to update appointment: ${response.statusCode} - ${response.body}');
+      }
+      
+      print('✅ Appointment updated successfully');
+    } on SocketException catch (e) {
+      print('🌐 Socket error: $e');
+      throw Exception('Network error: Please check your internet connection.');
+    } catch (e) {
+      print('❌ Error updating appointment: $e');
+      rethrow;
+    }
+  }
+
   static Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String status,

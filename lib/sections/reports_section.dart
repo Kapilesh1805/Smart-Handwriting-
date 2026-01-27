@@ -270,6 +270,10 @@ class _ReportsSectionState extends State<ReportsSection> {
           _buildAssessmentSection(theme, report),
           const SizedBox(height: 24),
 
+          // Charts: pressure + formation (last 10 assessments)
+          _buildChartsSection(theme, report),
+          const SizedBox(height: 24),
+
           // Recommendations
           _buildRecommendationsSection(theme, report),
           const SizedBox(height: 24),
@@ -561,6 +565,120 @@ class _ReportsSectionState extends State<ReportsSection> {
     );
   }
 
+  Widget _buildChartsSection(ThemeData theme, ChildReport report) {
+    // Use last 10 assessments
+    final trend = ReportService.getProgressTrend(report, limit: 10);
+
+    // Helper to map formation (might be string or number) to numeric 0..100
+    double mapFormation(dynamic v) {
+      const formationMap = { 'Poor': 30.0, 'Average': 60.0, 'Good': 90.0 };
+      if (v == null) return 0.0;
+      if (v is num) return v.toDouble();
+      if (v is String) {
+        if (formationMap.containsKey(v)) return formationMap[v]!;
+        final parsed = double.tryParse(v);
+        if (parsed != null) return parsed;
+      }
+      return 0.0;
+    }
+
+    final pressureSpots = <FlSpot>[];
+    final formationSpots = <FlSpot>[];
+    final dates = <DateTime>[];
+
+    for (int i = 0; i < trend.length; i++) {
+      final item = trend[i];
+      final p = (item['pressure'] is num) ? (item['pressure'] as num).toDouble() : 0.0;
+      final f = mapFormation(item['formation']);
+      pressureSpots.add(FlSpot(i.toDouble(), p));
+      formationSpots.add(FlSpot(i.toDouble(), f));
+      final d = item['date'];
+      dates.add(d is DateTime ? d : DateTime.tryParse(d.toString()) ?? DateTime.now());
+    }
+
+    String bottomLabel(int index) {
+      if (index < 0 || index >= dates.length) return '';
+      final dt = dates[index];
+      return '${dt.day}/${dt.month}';
+    }
+
+    LineChartData makeChartData(List<FlSpot> spots, Color lineColor, String ySuffix) {
+      return LineChartData(
+        gridData: FlGridData(show: true, drawVerticalLine: false),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+          bottomTitles: AxisTitles(sideTitles: SideTitles(
+            showTitles: true,
+            interval: 1,
+            getTitlesWidget: (value, meta) {
+              final idx = value.toInt();
+              return SideTitleWidget(axisSide: meta.axisSide, child: Text(bottomLabel(idx), style: const TextStyle(fontSize: 10)));
+            },
+            reservedSize: 28,
+          )),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        lineTouchData: LineTouchData(handleBuiltInTouches: true),
+        borderData: FlBorderData(show: true),
+        minX: 0,
+        maxX: (spots.isEmpty ? 0 : spots.length - 1).toDouble(),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: lineColor,
+            barWidth: 2,
+            dotData: FlDotData(show: true),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('TREND: Last ${trend.length} Assessments', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pressure (0-100%)', style: theme.textTheme.bodyLarge),
+                      const SizedBox(height: 8),
+                      SizedBox(height: 160, child: LineChart(makeChartData(pressureSpots, Colors.orange.shade700, '%'))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Formation (0-100)', style: theme.textTheme.bodyLarge),
+                      const SizedBox(height: 8),
+                      SizedBox(height: 160, child: LineChart(makeChartData(formationSpots, Colors.blue.shade700, ''))),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   // Export buttons removed as per UX request.
 
   List<Map<String, dynamic>> _getAssessmentComponents(ChildReport report) {
@@ -568,9 +686,9 @@ class _ReportsSectionState extends State<ReportsSection> {
     final hasData = scores.isNotEmpty;
     final firstScore = hasData ? scores.first : null;
 
-    // Check if specific scores are available
-    final hasSpacing = firstScore?.spacingScore != null;
-    final hasSentenceFormation = firstScore?.sentenceFormationScore != null;
+    // Check if specific scores are available across any assessment
+    final hasSpacing = scores.any((s) => s.spacingScore != null);
+    final hasSentenceFormation = scores.any((s) => s.sentenceFormationScore != null);
 
     List<Map<String, dynamic>> components = [
       {
@@ -594,13 +712,14 @@ class _ReportsSectionState extends State<ReportsSection> {
       // New additional rows requested: Pre writing shapes and Sentence writing (word formation)
       {
         'name': 'Pre writing Shapes',
-        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation).toString() : 'Take up a test',
+        'score': hasData ? ReportService.convertPercentageToScale(report.averageFormation).toString() : '0',
         'notes': 'Pre-writing shape recognition and tracing',
         'isAssessed': hasData,
       },
       {
         'name': 'Sentence Writing - Word Formation',
-        'score': hasSentenceFormation ? report.averageSentenceFormation.toString() : 'Take up a test',
+        // Show explicit 2 when sentence data exists, otherwise 0
+        'score': hasSentenceFormation ? 2 : 0,
         'notes': 'Word formation and sentence-level structure',
         'isAssessed': hasSentenceFormation,
       },
