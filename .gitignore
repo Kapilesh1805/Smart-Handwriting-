@@ -30,8 +30,16 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
-/coverage/
+# Ignore native build outputs
+build/android/
+build/ios/
+build/windows/
+build/linux/
+build/macos/
+coverage/
+# Explicitly allow build/web for static hosting
+!build/web
+!build/web/**
 
 # Symbolication related
 app.*.symbols
