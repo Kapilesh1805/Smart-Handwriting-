@@ -1,0 +1,58 @@
+services:
+  mongo:
+    image: mongo:5.0
+    container_name: smartboard_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+
+  ml-service:
+    build:
+      context: .
+      dockerfile: ml-service/Dockerfile
+    container_name: smartboard_ml
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: smartboard_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      ml-service:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+    environment:
+      MONGO_URI: mongodb://admin:password@mongo:27017/smartboard?authSource=admin
+      ML_SERVICE_URL: http://ml-service:8000
+
+  frontend:
+    image: handwriting-frontend:latest
+    container_name: smartboard_frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

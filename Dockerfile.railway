@@ -1,0 +1,29 @@
+# Railway Multi-Service Dockerfile
+FROM docker:latest
+
+# Install docker-compose
+RUN apk add --no-cache docker-compose
+
+# Set working directory
+WORKDIR /app
+
+# Copy all necessary files
+COPY . .
+
+# Copy service-specific files
+COPY ml-service/ ./ml-service/
+COPY smartboard-backend/ ./smartboard-backend/
+COPY handwriting_frontend/ ./handwriting_frontend/
+
+# Make deploy script executable
+RUN chmod +x deploy.sh
+
+# Expose ports
+EXPOSE 80 5000 8000 27017
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start all services
+CMD ["docker-compose", "-f", "docker-compose.prod.yml", "up", "-d"]
