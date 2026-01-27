@@ -1,0 +1,9 @@
+build:
+  python_version: "3.10"
+  system_packages:
+    - "libgl1"
+    - "ffmpeg"
+  gpu: false
+
+predict: "predict.py:Predictor"</content>
+<parameter name="filePath">c:\Users\Kapilesh\OneDrive\Desktop\hAND (3)\hAND\ml-service\predict.py
